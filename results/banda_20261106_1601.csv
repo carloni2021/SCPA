@@ -1,0 +1,8 @@
+# banda di lettura, ven 6 nov 2026, 16:01:16, CET, calcpar
+# modulo CPU_SrcID#0_MC#0_Chan#2_DIMM#0: 16384 MB
+# modulo CPU_SrcID#0_MC#1_Chan#2_DIMM#0: 16384 MB
+# modulo CPU_SrcID#1_MC#0_Chan#2_DIMM#0: 16384 MB
+# modulo CPU_SrcID#1_MC#1_Chan#2_DIMM#0: 16384 MB
+dispositivo,processi,mib,reps,t_min,t_mean,gbs_max,gbs_mean,gbs_teorica
+gpu,1,2048,10,5.276128e-03,5.278662e-03,407.0,406.8,448.1
+cpu,20,2048,10,3.023634e-02,3.048955e-02,71.0,70.4,nd

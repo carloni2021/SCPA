@@ -1,0 +1,180 @@
+# test/run_tests.sh eseguito sul server (calcpar) il 6/11/2026 alle 15:58,
+# prima delle campagne finali; da allora il programma non è cambiato.
+
+== 1. compilazione
+  OK       make BACKEND=cpu PREC=double
+  OK       make BACKEND=cpu PREC=float
+  OK       make BACKEND=cuda PREC=double
+  OK       make BACKEND=cuda PREC=float
+== 2. versione CPU, solo MPI (M=301, N=257)
+  OK       kernel=0 P=1 griglia 1x1 k=3             errore relativo 0.000e+00 (tolleranza 3.6e-14, errore/(eps*sqrt(N)) = 0.000) -> OK
+  OK       kernel=0 P=1 griglia 1x1 k=8             errore relativo 0.000e+00 (tolleranza 3.6e-14, errore/(eps*sqrt(N)) = 0.000) -> OK
+  OK       kernel=0 P=1 griglia 1x1 k=13            errore relativo 0.000e+00 (tolleranza 3.6e-14, errore/(eps*sqrt(N)) = 0.000) -> OK
+  OK       kernel=0 P=1 griglia 1x1 k=32            errore relativo 0.000e+00 (tolleranza 3.6e-14, errore/(eps*sqrt(N)) = 0.000) -> OK
+  OK       kernel=0 P=2 griglia 2x1 k=3             errore relativo 0.000e+00 (tolleranza 3.6e-14, errore/(eps*sqrt(N)) = 0.000) -> OK
+  OK       kernel=0 P=2 griglia 2x1 k=8             errore relativo 0.000e+00 (tolleranza 3.6e-14, errore/(eps*sqrt(N)) = 0.000) -> OK
+  OK       kernel=0 P=2 griglia 2x1 k=13            errore relativo 0.000e+00 (tolleranza 3.6e-14, errore/(eps*sqrt(N)) = 0.000) -> OK
+  OK       kernel=0 P=2 griglia 2x1 k=32            errore relativo 0.000e+00 (tolleranza 3.6e-14, errore/(eps*sqrt(N)) = 0.000) -> OK
+  OK       kernel=0 P=3 griglia 1x3 k=3             errore relativo 5.641e-16 (tolleranza 3.6e-14, errore/(eps*sqrt(N)) = 0.158) -> OK
+  OK       kernel=0 P=3 griglia 1x3 k=8             errore relativo 5.476e-16 (tolleranza 3.6e-14, errore/(eps*sqrt(N)) = 0.154) -> OK
+  OK       kernel=0 P=3 griglia 1x3 k=13            errore relativo 5.502e-16 (tolleranza 3.6e-14, errore/(eps*sqrt(N)) = 0.155) -> OK
+  OK       kernel=0 P=3 griglia 1x3 k=32            errore relativo 5.484e-16 (tolleranza 3.6e-14, errore/(eps*sqrt(N)) = 0.154) -> OK
+  OK       kernel=0 P=4 griglia 2x2 k=3             errore relativo 5.182e-16 (tolleranza 3.6e-14, errore/(eps*sqrt(N)) = 0.146) -> OK
+  OK       kernel=0 P=4 griglia 2x2 k=8             errore relativo 5.103e-16 (tolleranza 3.6e-14, errore/(eps*sqrt(N)) = 0.143) -> OK
+  OK       kernel=0 P=4 griglia 2x2 k=13            errore relativo 5.133e-16 (tolleranza 3.6e-14, errore/(eps*sqrt(N)) = 0.144) -> OK
+  OK       kernel=0 P=4 griglia 2x2 k=32            errore relativo 5.075e-16 (tolleranza 3.6e-14, errore/(eps*sqrt(N)) = 0.143) -> OK
+  OK       kernel=0 P=6 griglia 3x2 k=3             errore relativo 5.182e-16 (tolleranza 3.6e-14, errore/(eps*sqrt(N)) = 0.146) -> OK
+  OK       kernel=0 P=6 griglia 3x2 k=8             errore relativo 5.103e-16 (tolleranza 3.6e-14, errore/(eps*sqrt(N)) = 0.143) -> OK
+  OK       kernel=0 P=6 griglia 3x2 k=13            errore relativo 5.133e-16 (tolleranza 3.6e-14, errore/(eps*sqrt(N)) = 0.144) -> OK
+  OK       kernel=0 P=6 griglia 3x2 k=32            errore relativo 5.075e-16 (tolleranza 3.6e-14, errore/(eps*sqrt(N)) = 0.143) -> OK
+  OK       kernel=0 P=6 griglia 2x3 k=3             errore relativo 5.641e-16 (tolleranza 3.6e-14, errore/(eps*sqrt(N)) = 0.158) -> OK
+  OK       kernel=0 P=6 griglia 2x3 k=8             errore relativo 5.476e-16 (tolleranza 3.6e-14, errore/(eps*sqrt(N)) = 0.154) -> OK
+  OK       kernel=0 P=6 griglia 2x3 k=13            errore relativo 5.502e-16 (tolleranza 3.6e-14, errore/(eps*sqrt(N)) = 0.155) -> OK
+  OK       kernel=0 P=6 griglia 2x3 k=32            errore relativo 5.484e-16 (tolleranza 3.6e-14, errore/(eps*sqrt(N)) = 0.154) -> OK
+  OK       kernel=0 P=4 griglia 4x1 k=3             errore relativo 0.000e+00 (tolleranza 3.6e-14, errore/(eps*sqrt(N)) = 0.000) -> OK
+  OK       kernel=0 P=4 griglia 4x1 k=8             errore relativo 0.000e+00 (tolleranza 3.6e-14, errore/(eps*sqrt(N)) = 0.000) -> OK
+  OK       kernel=0 P=4 griglia 4x1 k=13            errore relativo 0.000e+00 (tolleranza 3.6e-14, errore/(eps*sqrt(N)) = 0.000) -> OK
+  OK       kernel=0 P=4 griglia 4x1 k=32            errore relativo 0.000e+00 (tolleranza 3.6e-14, errore/(eps*sqrt(N)) = 0.000) -> OK
+  OK       kernel=0 P=4 griglia 1x4 k=3             errore relativo 5.721e-16 (tolleranza 3.6e-14, errore/(eps*sqrt(N)) = 0.161) -> OK
+  OK       kernel=0 P=4 griglia 1x4 k=8             errore relativo 5.562e-16 (tolleranza 3.6e-14, errore/(eps*sqrt(N)) = 0.156) -> OK
+  OK       kernel=0 P=4 griglia 1x4 k=13            errore relativo 5.610e-16 (tolleranza 3.6e-14, errore/(eps*sqrt(N)) = 0.158) -> OK
+  OK       kernel=0 P=4 griglia 1x4 k=32            errore relativo 5.586e-16 (tolleranza 3.6e-14, errore/(eps*sqrt(N)) = 0.157) -> OK
+  OK       kernel=1 P=1 griglia 1x1 k=3             errore relativo 2.990e-16 (tolleranza 3.6e-14, errore/(eps*sqrt(N)) = 0.084) -> OK
+  OK       kernel=1 P=1 griglia 1x1 k=8             errore relativo 0.000e+00 (tolleranza 3.6e-14, errore/(eps*sqrt(N)) = 0.000) -> OK
+  OK       kernel=1 P=1 griglia 1x1 k=13            errore relativo 0.000e+00 (tolleranza 3.6e-14, errore/(eps*sqrt(N)) = 0.000) -> OK
+  OK       kernel=1 P=1 griglia 1x1 k=32            errore relativo 0.000e+00 (tolleranza 3.6e-14, errore/(eps*sqrt(N)) = 0.000) -> OK
+  OK       kernel=1 P=2 griglia 2x1 k=3             errore relativo 2.967e-16 (tolleranza 3.6e-14, errore/(eps*sqrt(N)) = 0.083) -> OK
+  OK       kernel=1 P=2 griglia 2x1 k=8             errore relativo 0.000e+00 (tolleranza 3.6e-14, errore/(eps*sqrt(N)) = 0.000) -> OK
+  OK       kernel=1 P=2 griglia 2x1 k=13            errore relativo 0.000e+00 (tolleranza 3.6e-14, errore/(eps*sqrt(N)) = 0.000) -> OK
+  OK       kernel=1 P=2 griglia 2x1 k=32            errore relativo 0.000e+00 (tolleranza 3.6e-14, errore/(eps*sqrt(N)) = 0.000) -> OK
+  OK       kernel=1 P=3 griglia 1x3 k=3             errore relativo 5.720e-16 (tolleranza 3.6e-14, errore/(eps*sqrt(N)) = 0.161) -> OK
+  OK       kernel=1 P=3 griglia 1x3 k=8             errore relativo 5.476e-16 (tolleranza 3.6e-14, errore/(eps*sqrt(N)) = 0.154) -> OK
+  OK       kernel=1 P=3 griglia 1x3 k=13            errore relativo 5.502e-16 (tolleranza 3.6e-14, errore/(eps*sqrt(N)) = 0.155) -> OK
+  OK       kernel=1 P=3 griglia 1x3 k=32            errore relativo 5.484e-16 (tolleranza 3.6e-14, errore/(eps*sqrt(N)) = 0.154) -> OK
+  OK       kernel=1 P=4 griglia 2x2 k=3             errore relativo 5.592e-16 (tolleranza 3.6e-14, errore/(eps*sqrt(N)) = 0.157) -> OK
+  OK       kernel=1 P=4 griglia 2x2 k=8             errore relativo 5.103e-16 (tolleranza 3.6e-14, errore/(eps*sqrt(N)) = 0.143) -> OK
+  OK       kernel=1 P=4 griglia 2x2 k=13            errore relativo 5.133e-16 (tolleranza 3.6e-14, errore/(eps*sqrt(N)) = 0.144) -> OK
+  OK       kernel=1 P=4 griglia 2x2 k=32            errore relativo 5.075e-16 (tolleranza 3.6e-14, errore/(eps*sqrt(N)) = 0.143) -> OK
+  OK       kernel=1 P=6 griglia 3x2 k=3             errore relativo 5.614e-16 (tolleranza 3.6e-14, errore/(eps*sqrt(N)) = 0.158) -> OK
+  OK       kernel=1 P=6 griglia 3x2 k=8             errore relativo 5.103e-16 (tolleranza 3.6e-14, errore/(eps*sqrt(N)) = 0.143) -> OK
+  OK       kernel=1 P=6 griglia 3x2 k=13            errore relativo 5.133e-16 (tolleranza 3.6e-14, errore/(eps*sqrt(N)) = 0.144) -> OK
+  OK       kernel=1 P=6 griglia 3x2 k=32            errore relativo 5.075e-16 (tolleranza 3.6e-14, errore/(eps*sqrt(N)) = 0.143) -> OK
+  OK       kernel=1 P=6 griglia 2x3 k=3             errore relativo 5.710e-16 (tolleranza 3.6e-14, errore/(eps*sqrt(N)) = 0.160) -> OK
+  OK       kernel=1 P=6 griglia 2x3 k=8             errore relativo 5.476e-16 (tolleranza 3.6e-14, errore/(eps*sqrt(N)) = 0.154) -> OK
+  OK       kernel=1 P=6 griglia 2x3 k=13            errore relativo 5.502e-16 (tolleranza 3.6e-14, errore/(eps*sqrt(N)) = 0.155) -> OK
+  OK       kernel=1 P=6 griglia 2x3 k=32            errore relativo 5.484e-16 (tolleranza 3.6e-14, errore/(eps*sqrt(N)) = 0.154) -> OK
+  OK       kernel=1 P=4 griglia 4x1 k=3             errore relativo 2.977e-16 (tolleranza 3.6e-14, errore/(eps*sqrt(N)) = 0.084) -> OK
+  OK       kernel=1 P=4 griglia 4x1 k=8             errore relativo 0.000e+00 (tolleranza 3.6e-14, errore/(eps*sqrt(N)) = 0.000) -> OK
+  OK       kernel=1 P=4 griglia 4x1 k=13            errore relativo 0.000e+00 (tolleranza 3.6e-14, errore/(eps*sqrt(N)) = 0.000) -> OK
+  OK       kernel=1 P=4 griglia 4x1 k=32            errore relativo 0.000e+00 (tolleranza 3.6e-14, errore/(eps*sqrt(N)) = 0.000) -> OK
+  OK       kernel=1 P=4 griglia 1x4 k=3             errore relativo 5.744e-16 (tolleranza 3.6e-14, errore/(eps*sqrt(N)) = 0.161) -> OK
+  OK       kernel=1 P=4 griglia 1x4 k=8             errore relativo 5.562e-16 (tolleranza 3.6e-14, errore/(eps*sqrt(N)) = 0.156) -> OK
+  OK       kernel=1 P=4 griglia 1x4 k=13            errore relativo 5.610e-16 (tolleranza 3.6e-14, errore/(eps*sqrt(N)) = 0.158) -> OK
+  OK       kernel=1 P=4 griglia 1x4 k=32            errore relativo 5.586e-16 (tolleranza 3.6e-14, errore/(eps*sqrt(N)) = 0.157) -> OK
+  OK       float kernel=0 P=4 griglia 2x2 k=3       errore relativo 2.110e-07 (tolleranza 1.9e-05, errore/(eps*sqrt(N)) = 0.110) -> OK
+  OK       float kernel=0 P=4 griglia 2x2 k=6       errore relativo 2.067e-07 (tolleranza 1.9e-05, errore/(eps*sqrt(N)) = 0.108) -> OK
+  OK       float kernel=0 P=4 griglia 2x2 k=8       errore relativo 2.083e-07 (tolleranza 1.9e-05, errore/(eps*sqrt(N)) = 0.109) -> OK
+  OK       float kernel=0 P=4 griglia 2x2 k=13      errore relativo 2.059e-07 (tolleranza 1.9e-05, errore/(eps*sqrt(N)) = 0.108) -> OK
+  OK       float kernel=0 P=4 griglia 2x2 k=20      errore relativo 2.084e-07 (tolleranza 1.9e-05, errore/(eps*sqrt(N)) = 0.109) -> OK
+  OK       float kernel=0 P=4 griglia 2x2 k=32      errore relativo 2.072e-07 (tolleranza 1.9e-05, errore/(eps*sqrt(N)) = 0.108) -> OK
+  OK       float kernel=1 P=4 griglia 2x2 k=3       errore relativo 2.099e-07 (tolleranza 1.9e-05, errore/(eps*sqrt(N)) = 0.110) -> OK
+  OK       float kernel=1 P=4 griglia 2x2 k=6       errore relativo 2.074e-07 (tolleranza 1.9e-05, errore/(eps*sqrt(N)) = 0.109) -> OK
+  OK       float kernel=1 P=4 griglia 2x2 k=8       errore relativo 2.083e-07 (tolleranza 1.9e-05, errore/(eps*sqrt(N)) = 0.109) -> OK
+  OK       float kernel=1 P=4 griglia 2x2 k=13      errore relativo 2.059e-07 (tolleranza 1.9e-05, errore/(eps*sqrt(N)) = 0.108) -> OK
+  OK       float kernel=1 P=4 griglia 2x2 k=20      errore relativo 2.084e-07 (tolleranza 1.9e-05, errore/(eps*sqrt(N)) = 0.109) -> OK
+  OK       float kernel=1 P=4 griglia 2x2 k=32      errore relativo 2.072e-07 (tolleranza 1.9e-05, errore/(eps*sqrt(N)) = 0.108) -> OK
+  OK       modalità -S P=2 griglia 2x1 k=13        errore relativo 0.000e+00 (tolleranza 3.6e-14, errore/(eps*sqrt(N)) = 0.000) -> OK
+  OK       modalità -S P=4 griglia 2x2 k=13        errore relativo 5.133e-16 (tolleranza 3.6e-14, errore/(eps*sqrt(N)) = 0.144) -> OK
+  OK       modalità -S P=6 griglia 2x3 k=13        errore relativo 5.502e-16 (tolleranza 3.6e-14, errore/(eps*sqrt(N)) = 0.155) -> OK
+  OK       senza padding (-p 0) kernel=0 P=4 2x2 k=13 errore relativo 5.133e-16 (tolleranza 3.6e-14, errore/(eps*sqrt(N)) = 0.144) -> OK
+  OK       senza padding (-p 0) kernel=1 P=4 2x2 k=13 errore relativo 5.133e-16 (tolleranza 3.6e-14, errore/(eps*sqrt(N)) = 0.144) -> OK
+== 3. versione GPU, 1 processo (M=2000, N=1500)
+  OK       double kernel=0 k=3                      errore relativo 0.000e+00 (tolleranza 8.6e-14, errore/(eps*sqrt(N)) = 0.000) -> OK
+  OK       double kernel=0 k=6                      errore relativo 0.000e+00 (tolleranza 8.6e-14, errore/(eps*sqrt(N)) = 0.000) -> OK
+  OK       double kernel=0 k=8                      errore relativo 0.000e+00 (tolleranza 8.6e-14, errore/(eps*sqrt(N)) = 0.000) -> OK
+  OK       double kernel=0 k=13                     errore relativo 0.000e+00 (tolleranza 8.6e-14, errore/(eps*sqrt(N)) = 0.000) -> OK
+  OK       double kernel=0 k=20                     errore relativo 0.000e+00 (tolleranza 8.6e-14, errore/(eps*sqrt(N)) = 0.000) -> OK
+  OK       double kernel=0 k=32                     errore relativo 0.000e+00 (tolleranza 8.6e-14, errore/(eps*sqrt(N)) = 0.000) -> OK
+  OK       double kernel=1 k=3                      errore relativo 1.329e-15 (tolleranza 8.6e-14, errore/(eps*sqrt(N)) = 0.154) -> OK
+  OK       double kernel=1 k=6                      errore relativo 1.318e-15 (tolleranza 8.6e-14, errore/(eps*sqrt(N)) = 0.153) -> OK
+  OK       double kernel=1 k=8                      errore relativo 1.322e-15 (tolleranza 8.6e-14, errore/(eps*sqrt(N)) = 0.154) -> OK
+  OK       double kernel=1 k=13                     errore relativo 1.325e-15 (tolleranza 8.6e-14, errore/(eps*sqrt(N)) = 0.154) -> OK
+  OK       double kernel=1 k=20                     errore relativo 1.324e-15 (tolleranza 8.6e-14, errore/(eps*sqrt(N)) = 0.154) -> OK
+  OK       double kernel=1 k=32                     errore relativo 1.324e-15 (tolleranza 8.6e-14, errore/(eps*sqrt(N)) = 0.154) -> OK
+  OK       double kernel=2 k=3                      errore relativo 1.329e-15 (tolleranza 8.6e-14, errore/(eps*sqrt(N)) = 0.154) -> OK
+  OK       double kernel=2 k=6                      errore relativo 1.318e-15 (tolleranza 8.6e-14, errore/(eps*sqrt(N)) = 0.153) -> OK
+  OK       double kernel=2 k=8                      errore relativo 1.322e-15 (tolleranza 8.6e-14, errore/(eps*sqrt(N)) = 0.154) -> OK
+  OK       double kernel=2 k=13                     errore relativo 1.325e-15 (tolleranza 8.6e-14, errore/(eps*sqrt(N)) = 0.154) -> OK
+  OK       double kernel=2 k=20                     errore relativo 1.324e-15 (tolleranza 8.6e-14, errore/(eps*sqrt(N)) = 0.154) -> OK
+  OK       double kernel=2 k=32                     errore relativo 1.324e-15 (tolleranza 8.6e-14, errore/(eps*sqrt(N)) = 0.154) -> OK
+  OK       double kernel=3 k=3                      errore relativo 1.329e-15 (tolleranza 8.6e-14, errore/(eps*sqrt(N)) = 0.154) -> OK
+  OK       double kernel=3 k=6                      errore relativo 1.318e-15 (tolleranza 8.6e-14, errore/(eps*sqrt(N)) = 0.153) -> OK
+  OK       double kernel=3 k=8                      errore relativo 1.322e-15 (tolleranza 8.6e-14, errore/(eps*sqrt(N)) = 0.154) -> OK
+  OK       double kernel=3 k=13                     errore relativo 1.325e-15 (tolleranza 8.6e-14, errore/(eps*sqrt(N)) = 0.154) -> OK
+  OK       double kernel=3 k=20                     errore relativo 1.324e-15 (tolleranza 8.6e-14, errore/(eps*sqrt(N)) = 0.154) -> OK
+  OK       double kernel=3 k=32                     errore relativo 1.324e-15 (tolleranza 8.6e-14, errore/(eps*sqrt(N)) = 0.154) -> OK
+  OK       double kernel=-1 k=3                     errore relativo 1.352e-15 (tolleranza 8.6e-14, errore/(eps*sqrt(N)) = 0.157) -> OK
+  OK       double kernel=-1 k=6                     errore relativo 1.347e-15 (tolleranza 8.6e-14, errore/(eps*sqrt(N)) = 0.157) -> OK
+  OK       double kernel=-1 k=8                     errore relativo 1.354e-15 (tolleranza 8.6e-14, errore/(eps*sqrt(N)) = 0.157) -> OK
+  OK       double kernel=-1 k=13                    errore relativo 1.357e-15 (tolleranza 8.6e-14, errore/(eps*sqrt(N)) = 0.158) -> OK
+  OK       double kernel=-1 k=20                    errore relativo 1.359e-15 (tolleranza 8.6e-14, errore/(eps*sqrt(N)) = 0.158) -> OK
+  OK       double kernel=-1 k=32                    errore relativo 1.355e-15 (tolleranza 8.6e-14, errore/(eps*sqrt(N)) = 0.158) -> OK
+  OK       float kernel=0 k=3                       errore relativo 6.861e-07 (tolleranza 4.6e-05, errore/(eps*sqrt(N)) = 0.149) -> OK
+  OK       float kernel=0 k=6                       errore relativo 6.878e-07 (tolleranza 4.6e-05, errore/(eps*sqrt(N)) = 0.149) -> OK
+  OK       float kernel=0 k=8                       errore relativo 6.889e-07 (tolleranza 4.6e-05, errore/(eps*sqrt(N)) = 0.149) -> OK
+  OK       float kernel=0 k=13                      errore relativo 6.912e-07 (tolleranza 4.6e-05, errore/(eps*sqrt(N)) = 0.150) -> OK
+  OK       float kernel=0 k=20                      errore relativo 6.908e-07 (tolleranza 4.6e-05, errore/(eps*sqrt(N)) = 0.150) -> OK
+  OK       float kernel=0 k=32                      errore relativo 6.882e-07 (tolleranza 4.6e-05, errore/(eps*sqrt(N)) = 0.149) -> OK
+  OK       float kernel=1 k=3                       errore relativo 1.399e-07 (tolleranza 4.6e-05, errore/(eps*sqrt(N)) = 0.030) -> OK
+  OK       float kernel=1 k=6                       errore relativo 1.391e-07 (tolleranza 4.6e-05, errore/(eps*sqrt(N)) = 0.030) -> OK
+  OK       float kernel=1 k=8                       errore relativo 1.397e-07 (tolleranza 4.6e-05, errore/(eps*sqrt(N)) = 0.030) -> OK
+  OK       float kernel=1 k=13                      errore relativo 1.388e-07 (tolleranza 4.6e-05, errore/(eps*sqrt(N)) = 0.030) -> OK
+  OK       float kernel=1 k=20                      errore relativo 1.382e-07 (tolleranza 4.6e-05, errore/(eps*sqrt(N)) = 0.030) -> OK
+  OK       float kernel=1 k=32                      errore relativo 1.380e-07 (tolleranza 4.6e-05, errore/(eps*sqrt(N)) = 0.030) -> OK
+  OK       float kernel=2 k=3                       errore relativo 1.399e-07 (tolleranza 4.6e-05, errore/(eps*sqrt(N)) = 0.030) -> OK
+  OK       float kernel=2 k=6                       errore relativo 1.391e-07 (tolleranza 4.6e-05, errore/(eps*sqrt(N)) = 0.030) -> OK
+  OK       float kernel=2 k=8                       errore relativo 1.397e-07 (tolleranza 4.6e-05, errore/(eps*sqrt(N)) = 0.030) -> OK
+  OK       float kernel=2 k=13                      errore relativo 1.388e-07 (tolleranza 4.6e-05, errore/(eps*sqrt(N)) = 0.030) -> OK
+  OK       float kernel=2 k=20                      errore relativo 1.382e-07 (tolleranza 4.6e-05, errore/(eps*sqrt(N)) = 0.030) -> OK
+  OK       float kernel=2 k=32                      errore relativo 1.380e-07 (tolleranza 4.6e-05, errore/(eps*sqrt(N)) = 0.030) -> OK
+  OK       float kernel=3 k=3                       errore relativo 1.399e-07 (tolleranza 4.6e-05, errore/(eps*sqrt(N)) = 0.030) -> OK
+  OK       float kernel=3 k=6                       errore relativo 1.391e-07 (tolleranza 4.6e-05, errore/(eps*sqrt(N)) = 0.030) -> OK
+  OK       float kernel=3 k=8                       errore relativo 1.397e-07 (tolleranza 4.6e-05, errore/(eps*sqrt(N)) = 0.030) -> OK
+  OK       float kernel=3 k=13                      errore relativo 1.388e-07 (tolleranza 4.6e-05, errore/(eps*sqrt(N)) = 0.030) -> OK
+  OK       float kernel=3 k=20                      errore relativo 1.382e-07 (tolleranza 4.6e-05, errore/(eps*sqrt(N)) = 0.030) -> OK
+  OK       float kernel=3 k=32                      errore relativo 1.380e-07 (tolleranza 4.6e-05, errore/(eps*sqrt(N)) = 0.030) -> OK
+  OK       float kernel=-1 k=3                      errore relativo 4.003e-07 (tolleranza 4.6e-05, errore/(eps*sqrt(N)) = 0.087) -> OK
+  OK       float kernel=-1 k=6                      errore relativo 2.425e-07 (tolleranza 4.6e-05, errore/(eps*sqrt(N)) = 0.053) -> OK
+  OK       float kernel=-1 k=8                      errore relativo 2.421e-07 (tolleranza 4.6e-05, errore/(eps*sqrt(N)) = 0.052) -> OK
+  OK       float kernel=-1 k=13                     errore relativo 2.414e-07 (tolleranza 4.6e-05, errore/(eps*sqrt(N)) = 0.052) -> OK
+  OK       float kernel=-1 k=20                     errore relativo 2.412e-07 (tolleranza 4.6e-05, errore/(eps*sqrt(N)) = 0.052) -> OK
+  OK       float kernel=-1 k=32                     errore relativo 2.392e-07 (tolleranza 4.6e-05, errore/(eps*sqrt(N)) = 0.052) -> OK
+  OK       senza padding (-p 0) double kernel=0 k=13 errore relativo 0.000e+00 (tolleranza 8.6e-14, errore/(eps*sqrt(N)) = 0.000) -> OK
+  OK       senza padding (-p 0) double kernel=1 k=13 errore relativo 1.325e-15 (tolleranza 8.6e-14, errore/(eps*sqrt(N)) = 0.154) -> OK
+  OK       senza padding (-p 0) double kernel=2 k=13 errore relativo 1.325e-15 (tolleranza 8.6e-14, errore/(eps*sqrt(N)) = 0.154) -> OK
+  OK       senza padding (-p 0) double kernel=3 k=13 errore relativo 1.325e-15 (tolleranza 8.6e-14, errore/(eps*sqrt(N)) = 0.154) -> OK
+  OK       senza padding (-p 0) double kernel=-1 k=13 errore relativo 1.357e-15 (tolleranza 8.6e-14, errore/(eps*sqrt(N)) = 0.158) -> OK
+== 4. versione GPU + MPI, warp_row, warp_row_xt, warp_row_smem (M=3001, N=2003, k=8)
+  OK       kernel=1 P=2 griglia 2x1                 errore relativo 1.530e-15 (tolleranza 9.9e-14, errore/(eps*sqrt(N)) = 0.154) -> OK
+  OK       kernel=1 P=2 griglia 1x2                 errore relativo 1.514e-15 (tolleranza 9.9e-14, errore/(eps*sqrt(N)) = 0.152) -> OK
+  OK       kernel=1 P=4 griglia 2x2                 errore relativo 1.514e-15 (tolleranza 9.9e-14, errore/(eps*sqrt(N)) = 0.152) -> OK
+  OK       kernel=1 P=4 griglia 1x4                 errore relativo 1.506e-15 (tolleranza 9.9e-14, errore/(eps*sqrt(N)) = 0.152) -> OK
+  OK       kernel=1 P=4 griglia 4x1                 errore relativo 1.530e-15 (tolleranza 9.9e-14, errore/(eps*sqrt(N)) = 0.154) -> OK
+  OK       kernel=1 P=6 griglia 3x2                 errore relativo 1.514e-15 (tolleranza 9.9e-14, errore/(eps*sqrt(N)) = 0.152) -> OK
+  OK       kernel=2 P=2 griglia 2x1                 errore relativo 1.530e-15 (tolleranza 9.9e-14, errore/(eps*sqrt(N)) = 0.154) -> OK
+  OK       kernel=2 P=2 griglia 1x2                 errore relativo 1.514e-15 (tolleranza 9.9e-14, errore/(eps*sqrt(N)) = 0.152) -> OK
+  OK       kernel=2 P=4 griglia 2x2                 errore relativo 1.514e-15 (tolleranza 9.9e-14, errore/(eps*sqrt(N)) = 0.152) -> OK
+  OK       kernel=2 P=4 griglia 1x4                 errore relativo 1.506e-15 (tolleranza 9.9e-14, errore/(eps*sqrt(N)) = 0.152) -> OK
+  OK       kernel=2 P=4 griglia 4x1                 errore relativo 1.530e-15 (tolleranza 9.9e-14, errore/(eps*sqrt(N)) = 0.154) -> OK
+  OK       kernel=2 P=6 griglia 3x2                 errore relativo 1.514e-15 (tolleranza 9.9e-14, errore/(eps*sqrt(N)) = 0.152) -> OK
+  OK       kernel=3 P=2 griglia 2x1                 errore relativo 1.530e-15 (tolleranza 9.9e-14, errore/(eps*sqrt(N)) = 0.154) -> OK
+  OK       kernel=3 P=2 griglia 1x2                 errore relativo 1.514e-15 (tolleranza 9.9e-14, errore/(eps*sqrt(N)) = 0.152) -> OK
+  OK       kernel=3 P=4 griglia 2x2                 errore relativo 1.514e-15 (tolleranza 9.9e-14, errore/(eps*sqrt(N)) = 0.152) -> OK
+  OK       kernel=3 P=4 griglia 1x4                 errore relativo 1.506e-15 (tolleranza 9.9e-14, errore/(eps*sqrt(N)) = 0.152) -> OK
+  OK       kernel=3 P=4 griglia 4x1                 errore relativo 1.530e-15 (tolleranza 9.9e-14, errore/(eps*sqrt(N)) = 0.154) -> OK
+  OK       kernel=3 P=6 griglia 3x2                 errore relativo 1.514e-15 (tolleranza 9.9e-14, errore/(eps*sqrt(N)) = 0.152) -> OK
+  OK       modalità -S P=2 griglia 2x1             errore relativo 1.530e-15 (tolleranza 9.9e-14, errore/(eps*sqrt(N)) = 0.154) -> OK
+  OK       modalità -S P=4 griglia 2x2             errore relativo 1.514e-15 (tolleranza 9.9e-14, errore/(eps*sqrt(N)) = 0.152) -> OK
+
+== riepilogo: 166 OK, 0 FALLITE
+   errore/(eps*sqrt(N)) massimo: double 0.161, float 0.150 (tolleranza: 10)
