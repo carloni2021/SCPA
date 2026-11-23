@@ -1,0 +1,6 @@
+# Generati dalla compilazione (make)
+bin/
+build/
+
+# Errori di compilazione salvati da test/run_tests.sh
+build_errors.txt
