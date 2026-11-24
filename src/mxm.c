@@ -101,8 +101,7 @@ void mxm_apply(mxm_t *h, const real_t *X, real_t *Y, double *times)
     const grid_t *g = h->g;
     double t[MXM_NTIMES];
 
-    /* X_c: sulla riga 0 è quella del chiamante, altrove arriva col bcast.
-       (Il cast toglie solo il const: chi trasmette non modifica il buffer.) */
+    // a seconda del rank del processo, Xc punta a X (riga 0) o a Xrecv (altrove)
     real_t *Xc = (g->myr == 0) ? (real_t *)X : h->Xrecv;
 
     const double t0 = MPI_Wtime();

@@ -223,8 +223,9 @@ int main(int argc, char **argv)
         for (int p = 0; p < MXM_NTIMES; p++)
             mean[p] = stats_compute(&ph[IDX(p, 0, o.reps)], o.reps).mean;
 
-        /* FLOPS = 2 M N k / T, con T tempo MEDIO per invocazione (traccia). */
+        /* FLOPS = 2 M N k / T, con T tempo MEDIO per invocazione, in double senno i bit non bastano. */
         double flop = 2.0 * o.M * (double)o.N * k;
+        // stampa CSV
         if (o.header)
             printf("backend,kernel,prec,mode,pad,M,N,k,Pr,Pc,reps,"
                    "t_core_mean,t_core_median,t_core_min,t_core_std,t_core_cv,"

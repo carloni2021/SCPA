@@ -4,3 +4,6 @@ build/
 
 # Errori di compilazione salvati da test/run_tests.sh
 build_errors.txt
+
+# Configurazione dell'IDE (JetBrains)
+.idea/
