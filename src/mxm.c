@@ -18,6 +18,9 @@
 #define MPI_REAL_T MPI_DOUBLE
 #endif
 
+//MPI_Init -> grid_create -> mxm_init_device -> mxm_block
+//-> (alloca e riempie A, X) -> mxm_create -> [mxm_apply ripetuta] -> mxm_destroy
+
 struct mxm {
     const grid_t *g;
     backend_t *be;       /* prodotto locale su A_rc                          */
@@ -28,34 +31,34 @@ struct mxm {
     real_t *Ypart;       /* Y_rc: il contributo di questo processo a Y_r     */
 };
 
-void mxm_init_device(MPI_Comm comm)
+void mxm_init_device(MPI_Comm comm) //assegna device a processo
 {
-    /* MPI_COMM_TYPE_SHARED raggruppa i processi che condividono la memoria,
-       cioè lo stesso nodo: il rank in quel gruppo è la posizione del
-       processo sul nodo, e il backend la usa per scegliere la GPU. */
+    // Ottengo il rank locale del processo sul nodo, per inizializzare il device corretto.
     MPI_Comm node;
     int local_rank;
+    //splita processi in base al nodo fisico
     MPI_Comm_split_type(comm, MPI_COMM_TYPE_SHARED, 0, MPI_INFO_NULL, &node);
+    // Ottengo il rank locale del processo sul nodo
     MPI_Comm_rank(node, &local_rank);
+    // init
     MPI_Comm_free(&node);
     be_init_device(local_rank);
 }
 
-mxm_block_t mxm_block(const grid_t *g, int M, int N, int pad)
-{
+mxm_block_t mxm_block(const grid_t *g, int M, int N, int pad){
+    //assegna blocco di a a processo
     mxm_block_t b;
-    b.Mloc  = blk_size(M, g->Pr, g->myr);
-    b.Nloc  = blk_size(N, g->Pc, g->myc);
+    b.Mloc  = blk_size(M, g->Pr, g->myr); //gestione +1
+    b.Nloc  = blk_size(N, g->Pc, g->myc); 
     b.m_off = blk_off(M, g->Pr, g->myr);
     b.n_off = blk_off(N, g->Pc, g->myc);
-    b.align = pad ? be_align_bytes() : 0;
-    b.lda   = prep_leading_dim(b.Nloc, b.align);
+    b.align = pad ? be_align_bytes() : 0; //padding calcolato
+    b.lda   = prep_leading_dim(b.Nloc, b.align); // padding applicato
     return b;
 }
 
-mxm_t *mxm_create(const grid_t *g, const mxm_block_t *b, int k,
-                  const real_t *A, int kernel)
-{
+mxm_t *mxm_create(const grid_t *g, const mxm_block_t *b, int k,const real_t *A, int kernel){
+    //prepara struttura dati per il prodotto distribuito
     mxm_t *h = malloc(sizeof *h);
     h->g = g;
     h->Mloc = b->Mloc;
@@ -67,13 +70,13 @@ mxm_t *mxm_create(const grid_t *g, const mxm_block_t *b, int k,
     h->Xrecv = (g->myr == 0) ? NULL
              : malloc((size_t)b->Nloc * k * sizeof(real_t) + 1);
     h->Ypart = malloc((size_t)b->Mloc * k * sizeof(real_t) + 1);
-
+    //passaggio (eventual) a gpu
     h->be = be_create(b->Mloc, b->Nloc, k, A, b->lda, b->align != 0, kernel);
     return h;
 }
 
 void mxm_set_serial(mxm_t *h, int on)
-{
+{ //seriale (-s) o parallelo (default)
     h->serial = on;
 }
 
@@ -94,7 +97,7 @@ static void local_product(mxm_t *h, const real_t *Xc, double *t)
 }
 
 void mxm_apply(mxm_t *h, const real_t *X, real_t *Y, double *times)
-{
+{ //invocazione del prodotto, cioè broadcast di X, prodotto locale e riduzione di Y, e restituisce i tempi;
     const grid_t *g = h->g;
     double t[MXM_NTIMES];
 
@@ -135,7 +138,7 @@ void mxm_apply(mxm_t *h, const real_t *X, real_t *Y, double *times)
         times[p] = t[p];
 }
 
-void mxm_destroy(mxm_t *h)
+void mxm_destroy(mxm_t *h) // libera la struttura dati del prodotto distribuito
 {
     be_destroy(h->be);
     free(h->Xrecv);

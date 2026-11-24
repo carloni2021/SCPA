@@ -1,10 +1,4 @@
-/*
- * common.h — tipo numerico e utility condivise da C e CUDA.
- *
- * La precisione si sceglie a compile-time:  make PREC=double | PREC=float
- * Questo header NON include mpi.h, così può essere incluso anche dai .cu
- * (nvcc non deve vedere MPI: la parte MPI resta confinata nei .c).
- */
+// per non includere più volte common.h
 #ifndef COMMON_H
 #define COMMON_H
 
@@ -23,4 +17,4 @@ typedef double real_t;
 /* Indice lineare row-major con leading dimension esplicita. */
 #define IDX(i, j, ld) ((size_t)(i) * (size_t)(ld) + (size_t)(j))
 
-#endif /* COMMON_H */
+#endif 

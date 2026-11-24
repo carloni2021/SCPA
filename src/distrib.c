@@ -9,12 +9,10 @@
  */
 #include "distrib.h"
 
-int grid_create(MPI_Comm comm, grid_t *g, int Pr, int Pc)
-{
+int grid_create(MPI_Comm comm, grid_t *g, int Pr, int Pc){
     int nprocs;
     MPI_Comm_size(comm, &nprocs);
-    /* Stesso conto con gli stessi numeri su tutti i processi: la decisione è
-       uguale per tutti senza bisogno di comunicare. */
+
     if (Pr * Pc != nprocs) return -1;    /* la griglia deve usare tutti i processi di comm */
 
     /* Griglia 2D non periodica: il processo sul bordo non ha come "vicino"
@@ -39,14 +37,9 @@ int grid_create(MPI_Comm comm, grid_t *g, int Pr, int Pc)
     g->Pr  = Pr;
     g->Pc  = Pc;
 
-    /* MPI_Cart_sub divide la griglia in sotto-griglie: il vettore indica
-       quali dimensioni MANTENERE (1) e quali fissare (0). Ogni processo
-       ottiene il comunicatore della sotto-griglia a cui appartiene.
 
-       keep_cols = {0, 1}: fisso la riga, mantengo la dimensione colonna
-                           -> un comunicatore per ogni riga della griglia.
-       keep_rows = {1, 0}: fisso la colonna, mantengo la dimensione riga
-                           -> un comunicatore per ogni colonna della griglia. */
+//un comunicatore per ogni riga della griglia.
+//un comunicatore per ogni colonna della griglia. */
     int keep_cols[2] = { 0, 1 };
     int keep_rows[2] = { 1, 0 };
     MPI_Cart_sub(g->grid, keep_cols, &g->row);

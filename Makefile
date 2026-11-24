@@ -10,45 +10,34 @@
 #   make BACKEND=cpu              CPU,  double  -> bin/mxm_cpu_double
 #   make BACKEND=cpu PREC=float   CPU,  float   -> bin/mxm_cpu_float
 #   make clean                    rimuove build/ e bin/
-#
-# Sul server, prima di compilare (se non già in ~/.bashrc):
-#   module purge && module load gnu/13.3.0 openmpi/5.0.9 cuda/12.8
-#
-# Organizzazione dei sorgenti:
-#   src/*.c       parte comune: main e MPI, generazione, verifica, statistiche
-#   src/cuda/     backend GPU: memoria del device e un file per ogni kernel
-#   src/cpu/      backend CPU: un file per ogni kernel
-# Si compilano sempre i sorgenti comuni più quelli del backend scelto.
-# Aggiungere un file in una di queste cartelle non richiede modifiche qui.
 
 PREC    ?= double
 BACKEND ?= cuda
-# Quadro RTX 5000: Turing, compute capability 7.5
+# per ottimizzare il codice CUDA per la GPU disponibile, usare sm_75 (Tesla T4) o sm_80 (A100)
 ARCH    ?= sm_75
-
+# scelta compilatori
 MPICC   ?= mpicc
 NVCC    ?= nvcc
 # Radice dell'installazione CUDA, ricavata dal percorso di nvcc
 # (/opt/cuda/12.8/bin/nvcc -> /opt/cuda/12.8).
+# serve per trovare librerie cuda
 CUDA_HOME ?= $(patsubst %/bin/nvcc,%,$(shell which $(NVCC) 2>/dev/null))
 
+#Scelta precisione 
 DEFS :=
 ifeq ($(PREC),float)
   DEFS += -DUSE_FLOAT
 endif
 
-# -march=native: codice ottimizzato per la CPU su cui si compila (sul server:
-# Xeon Cascade Lake, AVX-512). Per questo si compila sul server stesso.
+#Opzioni aggiuntive 
+# -O3: ottimizzazione 
+# -march=native: ottimizza per l'architettura della CPU locale all'esecuzione
 # -ffp-contract=fast: permette di fondere a*b + c in una sola istruzione FMA
-# (fused multiply-add). Con -std=c11 gcc la disattiva per default, e il
-# picco di calcolo della CPU si dimezza. nvcc la usa già per default sulla
-# GPU (-fmad=true): così le due versioni sono confrontabili. L'FMA arrotonda
-# una volta sola invece di due: il risultato è leggermente PIÙ accurato.
-# CFLAGS_EXTRA / NVFLAGS_EXTRA: opzioni aggiuntive da riga di comando, per
-# esperimenti senza modificare il Makefile (eseguire prima make clean,
-# altrimenti gli oggetti già compilati non vengono rifatti). Esempi:
-#   make BACKEND=cpu CFLAGS_EXTRA=-DACC_BUDGET=32  (blocchi CPU più piccoli)
-#   make NVFLAGS_EXTRA="-Xptxas -v"                (registri usati dai kernel)
+# -Wall -Wextra: attiva tutti i warning del compilatore
+# -std=c11: standard C11
+# -Iinclude: aggiunge la cartella include al percorso di ricerca degli header
+
+# CFLAGS_EXTRA e NVFLAGS_EXTRA possono essere definite dall'utente per aggiungere altre opzioni di compilazione.
 CFLAGS_EXTRA  ?=
 NVFLAGS_EXTRA ?=
 CFLAGS  := -O3 -march=native -ffp-contract=fast -Wall -Wextra -std=c11 -Iinclude $(DEFS) $(CFLAGS_EXTRA)
@@ -60,7 +49,7 @@ LDLIBS  := -lm
 BUILD := build/$(BACKEND)_$(PREC)
 BIN   := bin/mxm_$(BACKEND)_$(PREC)
 
-# Parte comune.
+# Parte comune alke build
 OBJS := $(patsubst src/%.c,$(BUILD)/%.o,$(wildcard src/*.c))
 
 # Parte specifica del backend.
@@ -76,7 +65,6 @@ else
 endif
 
 # Ogni oggetto dipende da tutti gli header: modificarne uno ricompila tutto
-# (semplice e sicuro, il progetto è piccolo).
 HDRS := $(wildcard include/*.h src/cpu/*.h src/cuda/*.h)
 
 .PHONY: all clean
@@ -87,12 +75,12 @@ $(BIN): $(OBJS)
 	@mkdir -p $(dir $@)
 	$(MPICC) $(CFLAGS) -o $@ $^ $(LDLIBS)
 
-# Sorgenti C (comuni e backend CPU), compilati da mpicc.  $< = sorgente.
+# Compilazione Sorgenti C (comuni e backend CPU), compilati da mpicc.  $< = sorgente.
 $(BUILD)/%.o: src/%.c $(HDRS)
 	@mkdir -p $(dir $@)
 	$(MPICC) $(CFLAGS) -c -o $@ $<
 
-# Sorgenti CUDA, compilati da nvcc (che NON vede MPI).
+# Compilazione Sorgenti CUDA, compilati da nvcc (che NON vede MPI).
 $(BUILD)/%.o: src/%.cu $(HDRS)
 	@mkdir -p $(dir $@)
 	$(NVCC) $(NVFLAGS) -c -o $@ $<

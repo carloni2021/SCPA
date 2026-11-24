@@ -1,31 +1,3 @@
-/*
- * prep.h — funzioni ausiliarie di preprocessamento dei dati della matrice.
- *
- * Preparano la memoria di A prima del calcolo (fuori dal tempo misurato):
- *
- *  1. Padding delle righe. La leading dimension lda (distanza in elementi
- *     tra l'inizio di due righe consecutive) viene arrotondata per eccesso a
- *     un multiplo di "align" byte. Le colonne in più ("padding") non
- *     contengono dati e non vengono mai lette.
- *
- *  2. Allocazione allineata. Il primo elemento di A sta a un indirizzo
- *     multiplo di "align".
- *
- * Insieme garantiscono che OGNI riga inizi a un indirizzo allineato.
- *
- * L'allineamento dipende da chi legge, quindi lo sceglie il backend
- * (be_align_bytes in backend.h), in base alla propria unità di lettura:
- *  - GPU: 128 byte = una linea della cache L1 (4 settori da 32 byte). Un
- *    warp legge 32 elementi consecutivi di una riga (256 byte in double):
- *    con la riga allineata tocca il minimo di settori (8) e di linee (2);
- *    disallineata, un settore e una linea in più;
- *  - CPU: 64 byte = una linea di cache: le righe iniziano a inizio linea.
- * Senza padding (opzione -p 0) lda = numero di colonne: se la larghezza del
- * blocco non è multipla dell'allineamento, la maggior parte delle righe
- * inizia disallineata.
- *
- * Costo: al massimo align - 1 byte in più per riga.
- */
 #ifndef PREP_H
 #define PREP_H
 
