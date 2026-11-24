@@ -1,17 +1,3 @@
-/*
- * backend_cpu.c — implementazione CPU dell'interfaccia backend.h.
- *
- * Versione "solo MPI": ogni processo MPI calcola il proprio blocco su un
- * solo core, e il parallelismo è dato dal numero di processi. Sul server
- * (2 socket x 10 core) si lancia un processo per core, legato al core:
- *     mpirun -np 20 --map-by core --bind-to core bin/mxm_cpu_double ...
- * Il legame (binding) evita che il sistema operativo sposti i processi tra
- * core e socket, e fa sì che ogni processo usi la memoria del proprio socket
- * (A viene inizializzata dal processo stesso: "first touch").
- *
- * Rispetto al backend CUDA non ci sono copie: A, X e Y sono già in memoria
- * host. A e X vengono usate direttamente dai buffer del chiamante.
- */
 #define _POSIX_C_SOURCE 200809L   /* clock_gettime con -std=c11 */
 #include <stdio.h>
 #include <stdlib.h>
@@ -31,6 +17,7 @@ struct backend {
 static double now(void)
 {
     struct timespec ts;
+    //orario attuale
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return ts.tv_sec + ts.tv_nsec * 1e-9;
 }
@@ -74,13 +61,12 @@ backend_t *be_create(int M, int N, int k, const real_t *A, int lda, int pad, int
     return b;
 }
 
-void be_set_x(backend_t *b, const real_t *X)
-{
-    b->X = X;            /* nessuna copia: il calcolo legge direttamente X */
+void be_set_x(backend_t *b, const real_t *X){
+    b->X = X;            /*semplice setter */
 }
 
-double be_compute(backend_t *b)
-{
+double be_compute(backend_t *b){
+    //lancia il kernel scelto e ritorna il tempo di calcolo in secondi
     double t0 = now();
     switch (b->kernel) {
     case KERNEL_CPU_ROW:   cpu_row  (b->M, b->N, b->k, b->A, b->lda, b->X, b->Y); break;
@@ -89,8 +75,8 @@ double be_compute(backend_t *b)
     return now() - t0;
 }
 
-void be_get_y(backend_t *b, real_t *Y)
-{
+void be_get_y(backend_t *b, real_t *Y){
+    //getter
     memcpy(Y, b->Y, (size_t)b->M * b->k * sizeof(real_t));
 }
 

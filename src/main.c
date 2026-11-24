@@ -1,19 +1,3 @@
-/*
- * main.c — programma di misura del prodotto distribuito Y = A * X.
- *
- * Il prodotto è in mxm.h / mxm.c (griglia, bcast, prodotto locale, reduce).
- * Qui c'è solo ciò che serve a misurarlo: opzioni, generazione di A e X,
- * riscaldamento, ripetizioni, statistiche, verifica e riga CSV.
- *
- * Uso:
- *   mpirun -np P bin/mxm_<backend>_<prec> -m M -n N -k K -r Pr -c Pc
- *          [-R ripetizioni] [-W warmup] [-T secondi] [-v kernel] [-p 0|1]
- *          [-S] [-C] [-H]
- *   Senza -v si usa il kernel migliore del backend (be_default_kernel).
- */
-/* getopt/optarg sono funzioni POSIX, non ISO C: con -std=c11 la libreria C
-   le dichiara solo se lo standard POSIX viene richiesto esplicitamente.
-   Va definito PRIMA di qualunque #include. */
 #define _POSIX_C_SOURCE 200809L
 
 #include <stdio.h>

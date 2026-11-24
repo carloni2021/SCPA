@@ -1,12 +1,3 @@
-/*
- * distrib.c — creazione della griglia di processi con le topologie
- * cartesiane di MPI.
- *
- * Una topologia cartesiana associa a ogni processo delle coordinate in una
- * griglia multidimensionale. MPI ne ricava le coordinate (MPI_Cart_coords)
- * e permette di estrarre sotto-griglie (MPI_Cart_sub), senza dover calcolare
- * a mano rank e gruppi.
- */
 #include "distrib.h"
 
 int grid_create(MPI_Comm comm, grid_t *g, int Pr, int Pc){

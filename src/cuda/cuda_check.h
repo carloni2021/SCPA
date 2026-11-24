@@ -1,15 +1,3 @@
-/*
- * cuda_check.h — controllo degli errori CUDA e cuBLAS (solo per i file .cu).
- *
- * Ogni funzione del runtime CUDA restituisce un codice di errore. Se lo si
- * ignora, un errore (memoria esaurita, accesso illegale, configurazione di
- * lancio non valida...) passa inosservato e si manifesta più avanti come
- * risultato sbagliato. Le macro controllano il codice e terminano indicando
- * file e riga in cui l'errore si è verificato.
- *
- * do { ... } while (0): fa sì che la macro si comporti come una singola
- * istruzione anche dentro un if senza graffe.
- */
 #ifndef CUDA_CHECK_H
 #define CUDA_CHECK_H
 
@@ -17,7 +5,7 @@
 #include <cstdlib>
 #include <cuda_runtime.h>
 #include <cublas_v2.h>
-
+// controllo degli errori CUDA e cuBLAS: se il codice ritorna un errore, stampa il messaggio e termina
 #define CUDA_CHECK(call) do {                                              \
     cudaError_t e_ = (call);                                               \
     if (e_ != cudaSuccess) {                                               \

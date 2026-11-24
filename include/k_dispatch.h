@@ -1,31 +1,6 @@
-/*
- * k_dispatch.h — da k (noto solo a runtime) a kernel con numero di colonne
- * costante. Usato da cpu_block e dai kernel GPU warp_row*.
- *
- * Questi kernel tengono gli accumulatori nei registri, e per farlo il
- * numero di colonne di Y che calcolano (KC) deve essere una costante di
- * compilazione. Ognuno sa quindi elaborare una "fetta" di colonne
- * [c0, c0 + KC) con KC fissato. Qui sta, una volta sola, la regola che
- * copre un k qualunque con le fette:
- *
- *   - k della traccia (3, 6, 8, 20, 32): una sola fetta con KC = k, quindi
- *     A viene letta una volta;
- *   - ogni altro k: fette da 8 colonne, più una fetta finale per le colonne
- *     rimanenti (1..7). Funziona per ogni k, al costo di leggere A una
- *     volta per fetta.
- *
- * È una macro e non una funzione perché KC deve arrivare al kernel scritto
- * nel codice come numero: in C è l'argomento costante di una funzione
- * always_inline, in CUDA il parametro di un template. Il kernel dice come
- * si elabora una fetta con una macro a due argomenti (KC, c0), ad esempio:
- *
- *     #define SLICE(KC, c0)  launch_slice<KC>(M, N, k, c0, A, lda, X, Y)
- *     K_DISPATCH(k, SLICE);
- *     #undef SLICE
- */
 #ifndef K_DISPATCH_H
 #define K_DISPATCH_H
-
+/* K_DISPATCH: divide le k colonne in fette con KC costante, per i kernel CPU e GPU */
 #define K_DISPATCH(k, SLICE)                                   \
     do {                                                       \
         int c0_ = 0;                                           \
