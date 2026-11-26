@@ -13,7 +13,6 @@
 
 PREC    ?= double
 BACKEND ?= cuda
-# per ottimizzare il codice CUDA per la GPU disponibile, usare sm_75 (Tesla T4) o sm_80 (A100)
 ARCH    ?= sm_75
 # scelta compilatori
 MPICC   ?= mpicc

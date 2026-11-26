@@ -1,0 +1,16 @@
+{
+  // Compila automaticamente a ogni salvataggio
+  "latex-workshop.latex.autoBuild.run": "onSave",
+  // Usa latexmk con pdflatex (gestisce da solo le compilazioni multiple per indice e riferimenti)
+  "latex-workshop.latex.recipe.default": "latexmk",
+  // Mette i file ausiliari (.aux, .log, .toc, ...) in una sottocartella, lasciando pulita quella principale
+  "latex-workshop.latex.outDir": "%DIR%/build",
+  // Apre il PDF in una scheda di VS Code accanto al sorgente
+  "latex-workshop.view.pdf.viewer": "tab",
+  // Mostra subito il pannello degli errori quando la compilazione fallisce
+  "latex-workshop.message.error.show": true,
+  // Testo a capo automatico nell'editor (comodo per i paragrafi lunghi)
+  "[latex]": {
+    "editor.wordWrap": "on"
+  }
+}

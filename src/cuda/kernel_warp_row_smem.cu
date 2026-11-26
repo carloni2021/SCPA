@@ -7,10 +7,9 @@
 #define FULL_MASK        0xffffffffu
 #define SMEM_BUDGET      16384             /* byte di shared per blocco */
 
-/* Colonne per tile: la più grande potenza di 2, almeno 32, tale che KC x TC elementi stiano in SMEM_BUDGET byte (calcolata in compilazione). */
+/* Colonne per tile: la più grande potenza di 2, almeno 32, tale che KC x TC elementi stiano in (16) byte (calcolata in compilazione). */
 template <int KC>
-__host__ __device__ constexpr int tile_cols()
-{
+__host__ __device__ constexpr int tile_cols(){
     int tc = 32;
     while (2 * tc * KC * (int)sizeof(real_t) <= SMEM_BUDGET) tc *= 2;
     return tc;
@@ -18,11 +17,8 @@ __host__ __device__ constexpr int tile_cols()
 
 template <int KC>
 __global__ void __launch_bounds__(THREADS)
-k_warp_row_smem(int M, int N, int c0,
-                const real_t *__restrict__ A, int lda,
-                const real_t *__restrict__ Xt, int ldxt,
-                int k, real_t *__restrict__ Y)
-{
+k_warp_row_smem(int M, int N, int c0,const real_t *__restrict__ A, int lda,const real_t *__restrict__ Xt, int ldxt,int k, real_t *__restrict__ Y){
+    //memoria condivisa 
     constexpr int TC = tile_cols<KC>();
     __shared__ real_t xs[KC][TC];                 /* tile di Xt: KC righe x TC colonne */
 

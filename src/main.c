@@ -1,8 +1,6 @@
-#define _POSIX_C_SOURCE 200809L
-
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>      /* getopt */
+#include <string.h>      /* strcmp */
 #include <math.h>
 #include <mpi.h>
 
@@ -38,31 +36,35 @@ static void usage(const char *p)
         "  backend %s, kernel: %s\n", p, be_name(), be_kernel_list());
 }
 
-/* Lettura delle opzioni con getopt: ogni lettera seguita da ':' richiede un
-   valore (optarg). Dimensioni scelte a runtime, come chiede la traccia. */
+/* Lettura delle opzioni: ogni opzione è un argomento separato; quelle con un
+   valore (-m 4096) lo prendono dall'argomento successivo.
+   Dimensioni scelte a runtime, come chiede la traccia. */
 static int parse(int argc, char **argv, opts_t *o)
 {
     *o = (opts_t){ .Pr = 1, .Pc = 1, .reps = 20, .warmup = 3, .warm_time = 1.0,
                    .kernel = be_default_kernel(), .pad = 1 };
-    int c;
-    // while per leggere le opzioni della riga di comando
-    while ((c = getopt(argc, argv, "m:n:k:r:c:R:W:T:v:p:SCH")) != -1) {
-        switch (c) {
-        case 'm': o->M = atoi(optarg); break;
-        case 'n': o->N = atoi(optarg); break;
-        case 'k': o->k = atoi(optarg); break;
-        case 'r': o->Pr = atoi(optarg); break;
-        case 'c': o->Pc = atoi(optarg); break;
-        case 'R': o->reps = atoi(optarg); break;
-        case 'W': o->warmup = atoi(optarg); break;
-        case 'T': o->warm_time = atof(optarg); break;
-        case 'v': o->kernel = atoi(optarg); break;
-        case 'p': o->pad = atoi(optarg) != 0; break;
-        case 'S': o->serial = 1; break;
-        case 'C': o->check = 1; break;
-        case 'H': o->header = 1; break;
-        default:  return -1;
+    for (int i = 1; i < argc; i++) {
+        const char *s = argv[i];
+        /* opzioni senza valore */
+        if      (strcmp(s, "-S") == 0) o->serial = 1;
+        else if (strcmp(s, "-C") == 0) o->check  = 1;
+        else if (strcmp(s, "-H") == 0) o->header = 1;
+        /* opzioni con valore: è l'argomento successivo */
+        else if (i + 1 < argc) {
+            const char *v = argv[++i];
+            if      (strcmp(s, "-m") == 0) o->M         = atoi(v);
+            else if (strcmp(s, "-n") == 0) o->N         = atoi(v);
+            else if (strcmp(s, "-k") == 0) o->k         = atoi(v);
+            else if (strcmp(s, "-r") == 0) o->Pr        = atoi(v);
+            else if (strcmp(s, "-c") == 0) o->Pc        = atoi(v);
+            else if (strcmp(s, "-R") == 0) o->reps      = atoi(v);
+            else if (strcmp(s, "-W") == 0) o->warmup    = atoi(v);
+            else if (strcmp(s, "-T") == 0) o->warm_time = atof(v);
+            else if (strcmp(s, "-v") == 0) o->kernel    = atoi(v);
+            else if (strcmp(s, "-p") == 0) o->pad       = atoi(v) != 0;
+            else return -1;                   /* opzione sconosciuta */
         }
+        else return -1;                       /* opzione sconosciuta o senza valore */
     }
     // Controllo dei valori letti: devono essere positivi Pr*Pc == numero di processi controllato a riga numero 149 circa.
     if (o->M <= 0 || o->N <= 0 || o->k <= 0 || o->Pr <= 0 || o->Pc <= 0 ||
