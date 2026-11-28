@@ -36,11 +36,10 @@ endif
 # -std=c11: standard C11
 # -Iinclude: aggiunge la cartella include al percorso di ricerca degli header
 
-# CFLAGS_EXTRA e NVFLAGS_EXTRA possono essere definite dall'utente per aggiungere altre opzioni di compilazione.
+# CFLAGS_EXTRA può essere definita dall'utente per aggiungere altre opzioni di compilazione.
 CFLAGS_EXTRA  ?=
-NVFLAGS_EXTRA ?=
 CFLAGS  := -O3 -march=native -ffp-contract=fast -Wall -Wextra -std=c11 -Iinclude $(DEFS) $(CFLAGS_EXTRA)
-NVFLAGS := -O3 -arch=$(ARCH) -lineinfo -Iinclude $(DEFS) $(NVFLAGS_EXTRA)
+NVFLAGS := -O3 -arch=$(ARCH) -lineinfo -Iinclude $(DEFS)
 LDLIBS  := -lm
 
 # Una cartella di oggetti per ogni combinazione backend/precisione: cambiando

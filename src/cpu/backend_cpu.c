@@ -30,19 +30,19 @@ const char *be_kernel_name(int kernel)
 {
     switch (kernel) {
     case KERNEL_CPU_ROW:   return "cpu_row";
-    case KERNEL_CPU_BLOCK: return "cpu_block";
+    case KERNEL_CPU_ROW_REG: return "cpu_row_reg";
     default:               return NULL;
     }
 }
 
-int be_default_kernel(void) { return KERNEL_CPU_BLOCK; }
+int be_default_kernel(void) { return KERNEL_CPU_ROW_REG; }
 
 /* Linea di cache della CPU: righe di A allineate a inizio linea. */
 int be_align_bytes(void) { return 64; }
 
 const char *be_kernel_list(void)
 {
-    return "0 = cpu_row, 1 = cpu_block (default)";
+    return "0 = cpu_row, 1 = cpu_row_reg (default)";
 }
 
 backend_t *be_create(int M, int N, int k, const real_t *A, int lda, int pad, int kernel)
@@ -70,7 +70,7 @@ double be_compute(backend_t *b){
     double t0 = now();
     switch (b->kernel) {
     case KERNEL_CPU_ROW:   cpu_row  (b->M, b->N, b->k, b->A, b->lda, b->X, b->Y); break;
-    case KERNEL_CPU_BLOCK: cpu_block(b->M, b->N, b->k, b->A, b->lda, b->X, b->Y); break;
+    case KERNEL_CPU_ROW_REG: cpu_row_reg(b->M, b->N, b->k, b->A, b->lda, b->X, b->Y); break;
     }
     return now() - t0;
 }

@@ -23,7 +23,7 @@
 \usepackage{subcaption}
 \usepackage{float}
 \usepackage{tikz}
-\usetikzlibrary{positioning,arrows.meta}
+\usetikzlibrary{positioning,arrows.meta,decorations.pathreplacing}
 \usepackage{pgfplots}
 \pgfplotsset{compat=1.17}
 \usepgfplotslibrary{groupplots}
@@ -117,14 +117,6 @@ un prodotto tra matrici. La traccia chiede che il codice funzioni per $k$
 generico e che sia collaudato almeno per $k = 3, 6, 8, 20, 32$. Nel programma
 $k$ è un parametro scelto a tempo di esecuzione.
 
-Il valore di $k$ determina il comportamento del nucleo. Ogni elemento di $A$
-partecipa a esattamente $k$ moltiplicazioni-somme: con $k$ piccolo si
-eseguono poche operazioni per ogni byte letto dalla memoria, e le prestazioni
-sono limitate dalla banda più che dalla capacità di calcolo. Al crescere di
-$k$ aumenta il lavoro che si può svolgere su un dato già caricato. Sfruttare
-questo riuso è l'idea su cui si basano tutti i kernel presentati nelle
-\cref{sec:gpu,sec:cpu}, e il suo effetto è analizzato in \cref{sec:roofline}.
-
 Anche le dimensioni $M$ e $N$ sono scelte dall'utente a tempo di esecuzione.
 Per le misure la traccia chiede di far crescere le dimensioni mantenendo
 almeno tre rapporti fissati tra $M$ e $N$, tra cui il caso quadrato. Si sono
@@ -195,20 +187,7 @@ La traccia chiede di collaudare il codice confrontandolo con
 un'implementazione seriale minimale. Il riferimento usato è un prodotto a tre
 cicli annidati, senza ottimizzazioni se non l'ordine dei cicli: per ogni riga
 di $A$, ciascun elemento viene letto una sola volta e moltiplicato per l'intera
-riga corrispondente di $X$.
-
-Il confronto avviene sull'intero risultato $Y$, misurando l'errore relativo in
-norma (di Frobenius) rispetto a una tolleranza che dipende dalla precisione e
-da $N$. La verifica non raccoglie mai $A$ o $Y$ su un solo processo: ogni
-processo della colonna~0 ricalcola le proprie righe di $Y$ con il riferimento
-seriale, rigenerando $A$ una riga alla volta dagli indici globali, e una sola
-\texttt{MPI\_Allreduce} somma i contributi all'errore. In memoria resta solo
-una riga di $A$ per volta, più $X$ intera.
-
-Il riferimento accumula sempre in doppia precisione, anche nella versione in
-singola: deve essere più accurato del codice che giudica, così l'errore
-misurato è quello del risultato e non la somma degli errori di due calcoli
-approssimati.
+riga corrispondente di $X$, la misura dell'errore e i risultati delle prove sono descritti in \cref{sec:verifica}.
 
 % =====================================================================
 \section{Server e hardware}\label{sec:hardware}
@@ -231,7 +210,7 @@ progetto usa:
         fornisce il compilatore per la GPU e la libreria cuBLAS.
 \end{itemize}
 
-Due caratteristiche della piattaforma condizionano il progetto.
+Due caratteristiche della piattaforma condizionano il progetto:
 
 \paragraph{Un solo nodo.} Tutti i processi MPI girano sulla stessa macchina:
 le comunicazioni tra processi passano per la memoria condivisa e non per una
@@ -251,27 +230,27 @@ $A$, che non viene mai comunicata, è invece caricata sulla GPU una sola volta.
 La GPU contiene 48 \emph{Streaming Multiprocessor} (SM), che eseguono i thread. Ogni SM esegue i thread
 a gruppi di 32, detti \emph{warp}, e ospita fino a 1024 thread attivi
 contemporaneamente (32 warp). Ogni SM dispone di 64 unità aritmetiche per la singola precisione ma di sole
-2 per la doppia. Ogni unità esegue una FMA, cioè 2 operazioni in virgola
-mobile, per ciclo: con 48 SM, alla frequenza Boost dichiarata di
-\SI{1815}{MHz}, i picchi teorici sono quindi di circa \SI{11.2}{TFLOPS} in
-singola precisione e \SI{348}{GFLOPS} in doppia. La
-frequenza dichiarata non è però un massimo: se temperatura e consumo lo
-permettono la GPU sale oltre, questo ha
-reso necessario un riscaldamento a tempo prima delle misure
-(\cref{sec:riscaldamento}).
-I picchi effettivi, misurati, sono riportati in \cref{sec:banda}.
+2 per la doppia~\cite{nvidia-turing}. Ogni unità esegue una FMA, cioè 2 operazioni, per ciclo. NVIDIA dichiara un
+picco di \SI{11.2}{TFLOPS} in singola precisione~\cite{nvidia-rtx5000}. Le
+unità per la doppia sono 32 volte meno, quindi il picco teorico in doppia è
+circa $\SI{11.2}{TFLOPS} / 32 \approx \SI{350}{GFLOPS}$. Questi valori
+corrispondono alla frequenza dichiarata dal produttore, che però non è
+necessariamente un massimo: se temperatura e consumo lo permettono, la GPU può
+lavorare a una frequenza più alta e superarli. Per questo come tetti si usano i
+picchi misurati (\cref{sec:banda}), e prima di ogni misura si esegue un
+riscaldamento a tempo (\cref{sec:riscaldamento}).
 
 \paragraph{Gerarchia di memoria.} Dalla più lenta e capiente alla più veloce e
 piccola:
 \begin{itemize}
-  \item \emph{memoria globale}: \SI{16}{GiB} GDDR6 su bus a 256 bit: con \SI{14}{Gbit/s} per pin la banda teorica è
-        $14 \times 256 / 8 = \SI{448}{GB/s}$. Qui risiedono $A$, $X$ e $Y$;
-  \item \emph{cache L2}: \SI{4}{MiB}, condivisa da tutti gli SM;
+  \item \emph{memoria globale}: \SI{16}{GiB} GDDR6 su bus a 256 bit: con \SI{14}{Gbit/s} per pin~\cite{nvidia-turing-wp} la banda teorica è
+        $14 \times 256 / 8 = \SI{448}{GB/s}$~\cite{nvidia-rtx5000}. Qui risiedono $A$, $X$ e $Y$;
+  \item \emph{cache L2}: \SI{4}{MiB}, condivisa da tutti gli SM~\cite{nvidia-turing-wp};
   \item \emph{cache L1 e memoria shared}: \SI{96}{KiB} per SM, ripartiti tra le
         due in modo configurabile. La memoria shared è gestita esplicitamente
         dal programmatore, e ogni blocco di thread può usarne al massimo
-        \SI{64}{KiB};
-  \item \emph{registri}: \num{65536} registri da 32 bit per SM, divisi tra i
+        \SI{64}{KiB}~\cite{nvidia-turing};
+  \item \emph{registri}: \num{65536} registri da 32 bit per SM~\cite{nvidia-turing}, divisi tra i
         thread attivi. Sono la memoria più veloce, ma più registri usa ogni
         thread, meno thread possono essere attivi insieme
         (\cref{sec:gpu}).
@@ -285,9 +264,9 @@ Il server monta due processori Intel Xeon Silver 4210 su due \emph{socket} disti
 \textbf{20 core}. Con l'\emph{hyper-threading} ogni core si presenta al sistema
 operativo come due core logici, quindi 40 in tutto. I due core logici di uno stesso core
 fisico condividono però le stesse unità di calcolo e le stesse cache: per un
-nucleo che tiene costantemente occupate le unità di calcolo e la memoria, un
-secondo thread sullo stesso core non porterebbe vantaggi. Per questo si usa al più
-un processo per core fisico (\cref{sec:cpu}). Ogni processore ha una cache L3 condivisa tra i suoi 10 core.
+nucleo limitato dalla banda di memoria un secondo thread sullo stesso core non
+porterebbe vantaggi. Per questo si usa al più un processo per core fisico
+(\cref{sec:binding}). Ogni processore ha una cache L3 condivisa tra i suoi 10 core.
 
 \paragraph{Due nodi NUMA.} Ogni processore ha la propria memoria, collegata
 direttamente ai suoi controller: \SI{32}{GiB} per socket, \SI{64}{GiB} in
@@ -303,51 +282,68 @@ processi ai core (\cref{sec:cpu}).
 
 \subsection{Banda e picco di calcolo misurati}\label{sec:banda}
 
-Per $k$ piccolo il nucleo è limitato dalla velocità con cui legge $A$ dalla
-memoria. Per valutare i kernel serve quindi il valore
-\emph{reale} della banda, oltre a quello nominale. La banda è stata misurata
-con due programmi dedicati (\texttt{bench/banda/}), che leggono la memoria
+Per valutare i kernel si misura il valore \emph{reale} della banda, oltre a quello nominale. La banda della GPU è stata misurata
+con un programma dedicato (\texttt{bench/banda/}), che legge la memoria
 nello stesso modo in cui il nucleo legge $A$.
 
 \paragraph{Banda della GPU (\texttt{banda\_gpu.cu}):} Un kernel legge un vettore di \SI{2}{GiB} di \texttt{double},
 molto più grande della cache L2 da \SI{4}{MiB}, così che ogni lettura arrivi
-davvero dalla memoria globale. I warp leggono elementi contigui (letture
+davvero dalla memoria globale (\cref{lst:banda-gpu}). I warp leggono elementi contigui (letture
 coalescenti) e ogni thread mantiene più somme indipendenti, per tenere sempre
 molte letture in corso. Il risultato è di \SI{407}{GB/s}, il \SI{91}{\percent}
 dei \SI{448}{GB/s} nominali. Media e massimo quasi coincidono
-(\SI{406.8}{GB/s} e \SI{407.1}{GB/s}): la misura è stabile.
+(\SI{406.8}{GB/s} e \SI{407.1}{GB/s}): la misura è stabile. La banda non dipende
+dal tipo del dato: lo stesso valore si usa come tetto anche in \texttt{float}.
 
-\paragraph{Banda della CPU (\texttt{banda\_cpu.c}):} Si usano 20 processi MPI, uno per core fisico e legato al
-proprio core, come nella versione CPU del nucleo. Ogni processo inizializza e
-poi legge un proprio pezzo del vettore da \SI{2}{GiB}, così che i dati si
-trovino nella memoria del suo nodo NUMA. Anche qui ogni processo usa più
-somme indipendenti: altrimenti ogni somma attenderebbe la precedente e si
-misurerebbe la latenza dell'addizione invece della banda. Il risultato è di
-\SI{71}{GB/s} come massimo e di \SI{70.4}{GB/s} in media. Come tetto si
-assume il massimo, che un kernel non può superare.
-
-\paragraph{Perché la CPU si ferma a \SI{71}{GB/s}.} Ogni processore dispone di
-6 canali di memoria, 12 in tutto, e ogni canale con un modulo DDR4-2400
-installato fornisce \SI{19.2}{GB/s}. Il sistema riporta però solo quattro
-moduli da \SI{16}{GiB}, uno per controller di memoria: sono occupati solo 4
-canali su 12. Ne segue:
-\begin{itemize}
-  \item banda nominale con 4 canali: $4 \times 19.2 = \SI{76.8}{GB/s}$, di cui
-        la misura raggiunge il \SI{93}{\percent};
-  \item banda nominale con tutti i 12 canali occupati: \SI{230.4}{GB/s}.
-\end{itemize}
-La banda della CPU è quindi limitata dalla configurazione della memoria del
-server, non dai processori. È un dato da tenere presente nel confronto tra le
-due versioni: la GPU dispone di circa 5,7 volte la banda della CPU.
+\begin{lstlisting}[caption={Kernel di lettura per la misura della banda (\texttt{banda\_gpu.cu}).}, label={lst:banda-gpu}]
+__global__ void k_read(const double *__restrict__ p, size_t n,
+                       double *out)
+{
+    const size_t stride = (size_t)gridDim.x * blockDim.x;
+    size_t i = (size_t)blockIdx.x * blockDim.x + threadIdx.x;
+    double s0 = 0, s1 = 0, s2 = 0, s3 = 0;  /* somme indipendenti */
+    for (; i + 3 * stride < n; i += 4 * stride) {
+        s0 += p[i];                            /* letture coalescenti */
+        s1 += p[i + stride];
+        s2 += p[i + 2 * stride];
+        s3 += p[i + 3 * stride];
+    }
+    for (; i < n; i += stride) s0 += p[i];
+    const double s = s0 + s1 + s2 + s3;
+    /* mai vero: impedisce di eliminare le letture */
+    if (s < 0) out[0] = s;
+}
+\end{lstlisting}
 
 \paragraph{Picco di calcolo della GPU.} Un secondo programma
 (\texttt{bench/banda/picco\_gpu.cu}) misura il picco di calcolo: ogni thread
 esegue solo moltiplicazioni-somme sui propri registri, senza accedere alla
-memoria, con più catene indipendenti per tenere sempre occupate le unità. Il
+memoria, con più catene indipendenti per tenere sempre occupate le unità (\cref{lst:picco-gpu}). Il
 risultato è di \SI{374}{GFLOPS} in \texttt{double} e \SI{11.9}{TFLOPS} in
-\texttt{float}, corrispondenti in entrambi i casi a una frequenza di circa
-\SI{1.94}{\giga\hertz}. Sono questi i valori usati come tetto del calcolo in
-\cref{sec:roofline}.
+\texttt{float}, circa il \SIrange{6}{7}{\percent} sopra i picchi dichiarati: un
+segno che durante la misura la GPU lavora a una frequenza più alta di quella
+nominale (\cref{sec:gpu-hw}). Sono questi i valori usati come tetto del calcolo.
+
+\begin{lstlisting}[caption={Kernel per la misura del picco di calcolo (\texttt{picco\_gpu.cu}, \texttt{CHAINS} = 8).}, label={lst:picco-gpu}]
+__global__ void k_fma(T *out, const T *in)
+{
+    /* lette dalla memoria: restano in registri */
+    const T b = in[0], c = in[1];
+    T a[CHAINS];
+#pragma unroll
+    for (int i = 0; i < CHAINS; i++) a[i] = (T)(threadIdx.x + i);
+    for (int it = 0; it < ITERS; it++) {
+#pragma unroll
+        for (int i = 0; i < CHAINS; i++)
+            a[i] = fma(a[i], b, c);        /* 2 operazioni */
+    }
+    T s = 0;
+#pragma unroll
+    for (int i = 0; i < CHAINS; i++) s += a[i];
+    /* mai vero: impedisce di eliminare il calcolo */
+    if (s == (T)-12345.0) out[0] = s;
+}
+\end{lstlisting}
 
 \subsection{Il modello roofline}\label{sec:roofline}
 
@@ -355,23 +351,25 @@ Per capire quanto un kernel è vicino al
 massimo possibile si usa il modello \emph{roofline}~\cite{williams2009}. Le
 prestazioni raggiungibili sono limitate da due tetti, si considera sempre il minore:
 \[
-  \text{GFLOPS}_{\text{massimi}} = \min\bigl(\text{picco di calcolo},\ \text{banda} \times \underbrace{\text{intensità}}_{\text{definita tra poco}}\bigr).
+  \text{GFLOPS}_{\text{Roofline}} = \min\bigl(\underbrace{\text{picco di calcolo}}_\text{tetto di calcolo},\underbrace{\text{banda} \times \text{intensità}}_{\text{tetto della memoria}}\bigr).
 \]
 \begin{itemize}
-  \item Il \emph{tetto della memoria} è banda $\times$ intensità: quante
-        operazioni si possono fare con i dati che la memoria riesce a fornire.
-  \item Il \emph{tetto del calcolo} è il \emph{picco} dell'hardware: quante
+  \item Il \emph{tetto di calcolo} dell'hardware: quante
         operazioni al secondo le unità di calcolo possono eseguire, qualunque
         sia la quantità di dati.
+  \item Il \emph{tetto della memoria} è banda $\times$ intensità: quante
+        operazioni si possono fare con i dati che la memoria riesce a fornire.
 \end{itemize}
 La banda si misura in byte al secondo e l'intensità in operazioni per byte: il
-loro prodotto è quindi in operazioni al secondo, rappresenta quini la velocità a cui il
-kernel andrebbe se il suo unico limite fosse la memoria. Il picco è invece la
+loro prodotto è quindi in operazioni al secondo, rappresenta la velocità a cui il
+kernel andrebbe se il suo unico limite fosse la memoria ovvero il tetto della memoria.
+
+Il tetto di calcolo è invece la
 velocità a cui andrebbe se fosse limitato solamente dal calcolo. Il kernel deve
 rispettare entrambi i limiti contemporaneamente, quindi conta il più basso dei
 due: da qui il minimo.
 
-\paragraph{Quante operazioni per ogni byte.} L'intensità indica quanto lavoro
+L'\emph{intensità} indica quanto lavoro
 si fa con ogni byte letto:
 \[
   \text{intensità}
@@ -379,9 +377,8 @@ si fa con ogni byte letto:
   = \frac{\underbrace{k}_{\text{moltiplicazioni}} + \underbrace{k}_{\text{somme}}}
          {\text{byte per elemento}} .
 \]
-È la \emph{operational intensity} di~\cite{williams2009}: contano solo i byte
-letti dalla memoria principale, dopo il filtro delle cache. Nel nucleo quasi
-tutti i byte letti appartengono ad $A$, di gran lunga la
+Contano solo i byte letti dalla memoria principale (operational intensity di ~\cite{williams2009}), dopo il filtro delle cache.
+Nel nucleo quasi tutti gli elementi letti appartengono ad $A$, di gran lunga la
 matrice più grande. Ogni suo elemento viene letto una volta e usato in $k$
 moltiplicazioni e $k$ somme (con k numero di colonne di $X$), cioè $2k$ operazioni, dividendo per i byte
 occupati da un elemento si ottiene:
@@ -389,18 +386,20 @@ occupati da un elemento si ottiene:
   \item in \texttt{double} (8 byte): $2k/8 = k/4$ operazioni per byte;
   \item in \texttt{float} (4 byte): $2k/4 = k/2$ operazioni per byte.
 \end{itemize}
-L'intensità cresce con $k$: più colonne ha $X$, più lavoro si fa con lo stesso
+Resta facile intuire che l'intensità cresce con $k$: più colonne ha $X$, più lavoro si fa con lo stesso
 elemento di $A$.
+Sfruttare questo riuso è l'idea su cui si basano tutti i kernel presentati
+nelle \cref{sec:gpu,sec:cpu}.
 
 \paragraph{I due tetti della GPU.} Per il tetto della memoria si usa la banda
 misurata, \SI{407}{GB/s}, perché quella nominale non è raggiungibile
 (\cref{sec:banda}), per il tetto del calcolo il picco misurato,
 \SI{374}{GFLOPS} in \texttt{double} e \SI{11.9}{TFLOPS} in \texttt{float}
 (\cref{sec:banda}). Inseriti nella
-formula, il tetto della memoria diventa $407 \cdot \underbrace{k/4}_{\text{intensità}}$~GFLOPS in
+formula, il tetto della memoria diventa $407 \cdot k/4 $~GFLOPS in
 \texttt{double} e $407 \cdot k/2$~GFLOPS in \texttt{float} (\cref{tab:tetti}).
 
-\paragraph{Dove si incontrano i due tetti.} Il limite passa dalla memoria al
+\paragraph{Dove si incontrano i due tetti:} il limite passa dalla memoria al
 calcolo quando i due tetti sono uguali:
 \[
   \text{banda} \times I = \text{picco}
@@ -412,11 +411,10 @@ $I = 374/407 \approx 0{,}92$ operazioni per byte e, poiché $I = k/4$,
 $k \approx 3{,}7$, mentre in \texttt{float} $I = \num{11876}/407 \approx 29{,}2$ e,
 poiché $I = k/2$, $k \approx 58$.
 
-\emph{In \texttt{double}}, con $k = 3$ la memoria consente al massimo
-$407 \cdot 3/4 \approx 305$~GFLOPS, sotto il picco: il limite è la memoria. Già
-con $k = 6$ la memoria consentirebbe 611~GFLOPS, ma la GPU in \texttt{double}
-non va oltre 374: da lì in poi il limite è il calcolo, e aumentare $k$ non serve
-più.
+Questo significa che \emph{in \texttt{double}} da k > 3 in poi il limite è il calcolo.
+Con $k = 3$ infatti la memoria consente al massimo
+$407 \cdot 3/4 \approx 305$~GFLOPS, già con $k = 6$ la memoria consentirebbe 611~GFLOPS,
+ma la GPU in \texttt{double} non va oltre 374, da qui in poi aumentare $k$ non renderà più veloci.
 
 \emph{In \texttt{float}} il picco è circa 32 volte più alto, \num{11900}~GFLOPS. Anche
 con $k = 32$ la memoria si ferma a $407 \cdot 32/2 \approx 6500$~GFLOPS, ancora
@@ -435,9 +433,6 @@ $k$ della traccia.
     \bottomrule
   \end{tabular}
 \end{table}
-
-\Cref{fig:roof-double,fig:roof-float} mostrano, per ciascuna precisione, i due
-tetti separati e la roofline che ne risulta, cioè il loro minimo.
 
 \begin{figure}[H]
   \centering
@@ -608,8 +603,8 @@ assegnati a ogni processo, usato per verificare la distribuzione degli indici.
 (\texttt{config/}), i programmi di misura della banda (\texttt{banda/}) con
 lo script che li lancia (\texttt{banda.sh}), lo script \texttt{mem\_locale.sh},
 che vincola la memoria di ogni processo CPU al proprio socket
-(\cref{sec:binding}), e gli script per le verifiche più specifiche (budget dei registri della CPU,
-frequenza della GPU), descritti in \cref{sec:campagne}.
+(\cref{sec:binding}), e lo script \texttt{frequenza.sh} per la verifica
+della frequenza della GPU, descritti in \cref{sec:campagne}.
 
 \paragraph{\texttt{results/}} Per ogni campagna, il file CSV dei risultati,
 una copia della configurazione e il log degli errori.
@@ -636,39 +631,12 @@ L'elemento $(i, j)$ si trova $i$ righe intere più avanti dell'inizio, più $j$
 posizioni. Il parametro $\mathit{ld}$ (\emph{leading dimension}) è la distanza
 in elementi tra l'inizio di una riga e l'inizio della successiva che può variare
 dal numero di colonne nel caso di matrici con padding, come per $A$ (\emph{padding},
-\cref{sec:padding}). Usare ovunque la stessa macro, con $\mathit{ld}$
-esplicito, evita gli errori di indicizzazione che nascerebbero dal riscrivere
-il conto a mano in ogni punto del codice.
+\cref{sec:padding}).
 
-Il prodotto $i \cdot \mathit{ld}$ è calcolato nel tipo \texttt{size\_t}
-(intero senza segno a 64 bit) e non in \texttt{int}: a 32 bit il prodotto
-supererebbe il massimo rappresentabile, circa $2{,}1$ miliardi, per matrici
-con più di $2^{31}$ elementi, e l'errore non verrebbe segnalato dunque il programma
-leggerebbe dalla posizione sbagliata.
-
-Il layout row-major si adatta bene a questo nucleo per tre motivi:
-\begin{itemize}
-  \item $A$ viene letta riga per riga, e ogni riga è un'area contigua di
-        memoria: è il modo più efficiente di leggerla, sia sulla GPU sia sulla
-        CPU (\cref{sec:gpu,sec:cpu});
-  \item $X$ e $Y$ hanno solo $k$ colonne: in row-major i $k$ valori di una riga
-        sono adiacenti, e ogni elemento di $A$ si moltiplica proprio per
-        un'intera riga di $X$;
-  \item il blocco di $X$ necessario a un processo è un insieme di righe
-        consecutive, che in row-major formano un'unica area contigua, e lo stesso vale per il blocco di $Y$. Per questo \texttt{MPI\_Bcast} e
-        \texttt{MPI\_Reduce} operano direttamente sui buffer, senza copiare
-        prima i dati in un buffer temporaneo (\cref{sec:mpi}).
-\end{itemize}
-
-\paragraph{L'eccezione:} sulla GPU i kernel \texttt{warp\_row\_xt} e
-\texttt{warp\_row\_smem} leggono $X$ in modo più efficiente se trasposta: per
-loro si prepara una copia aggiuntiva $X^T$ di dimensione $k \times N$, cioè $X$
-in column-major, prima del calcolo e fuori dal tempo misurato
-(\cref{sec:gpu}). La $X$ originale, usata da MPI e dalla CPU, resta
-row-major. La libreria cuBLAS, usata come riferimento, lavora invece in
-column-major, ma non richiede copie: una matrice row-major, letta come
-column-major, è la sua trasposta, e il prodotto si riformula di conseguenza
-(\cref{sec:gpu}).
+Il layout row-major si adatta bene alla lettura di $A$, che avviene riga per
+riga: ogni riga è un'area contigua di memoria (\cref{sec:gpu,sec:cpu}). Per
+$X$ e $Y$ il layout più adatto dipende da chi li usa, e se ne parla dove
+servono: nella distribuzione dei dati (\cref{sec:distribuzione}) e nei kernel.
 
 \subsection{Generazione riproducibile dei dati}\label{sec:generazione}
 
@@ -727,9 +695,7 @@ che mettono alla prova la precisione del calcolo. $A$ e $X$ usano due semi
 diversi.
 
 Il valore è generato in \texttt{double} e arrotondato a \texttt{real\_t} al
-momento della memorizzazione. In singola precisione il riferimento seriale
-applica lo stesso arrotondamento, così che entrambi partano esattamente dagli
-stessi dati.
+momento della memorizzazione. 
 
 \subsection{Padding e allineamento}\label{sec:padding}
 
@@ -764,30 +730,22 @@ L'allineamento è scelto in base all'unità di lettura del backend, e quindi dip
         byte in più.
 \end{itemize}
 
-Sulla GPU, $A$ mantiene la stessa disposizione che ha in memoria host, con la
-stessa \texttt{lda}, già arrotondata a \SI{128}{byte} perché l'allineamento
-dipende dal backend compilato. Sul dispositivo si alloca spazio per $M$ righe
-di \texttt{lda} elementi, padding compreso, e la copia avviene con
-\texttt{cudaMemcpy2D}: questa trasferisce le righe una alla volta, copiando
-solo gli $N$ elementi utili di ciascuna e saltando le posizioni di padding,
-che sul dispositivo restano non inizializzate perché non vengono mai lette.
-Le righe risultano allineate anche sulla GPU per due motivi:
-\begin{itemize}
-  \item \texttt{cudaMalloc} restituisce un indirizzo multiplo di
-        \SI{256}{byte}, quindi la prima riga è allineata;
-  \item il passo tra una riga e la successiva, \texttt{lda}, è multiplo di
-        \SI{128}{byte}, quindi sono allineate anche tutte le righe successive.
-\end{itemize}
-È lo stesso ragionamento fatto sull'host, con \texttt{cudaMalloc} al posto di
-\texttt{posix\_memalign}.
+Sulla GPU, $A$ mantiene la stessa \texttt{lda} dell'host. Sul dispositivo si
+alloca spazio per $M$ righe di \texttt{lda} elementi, padding compreso, e la
+copia avviene con \texttt{cudaMemcpy2D}, che trasferisce solo gli $N$ elementi
+utili di ogni riga e salta le posizioni di padding, mai lette. Le righe
+restano allineate per gli stessi due motivi visti sull'host:
+\texttt{cudaMalloc} restituisce un indirizzo multiplo di \SI{256}{byte} e il
+passo \texttt{lda} è multiplo di \SI{128}{byte}.
 
-$X^T$, invece, non esiste sull'host: la costruisce direttamente la GPU
-trasponendo $X$. Le sue righe sono lunghe $N$ come quelle di $A$, quindi
-ricevono lo stesso padding, con leading dimension arrotondata a \SI{128}{byte}.
+La trasposta $X^T$ usata da alcuni kernel GPU (\cref{sec:warp-xt}), invece,
+non esiste sull'host: la costruisce direttamente la GPU trasponendo $X$. Le
+sue righe sono lunghe $N$ come quelle di $A$, quindi ricevono lo stesso
+padding, con leading dimension arrotondata a \SI{128}{byte}.
 
 Il costo è al più di 63 o 127 byte per riga, trascurabile rispetto a righe di
 decine di migliaia di byte. Il padding si può disattivare con l'opzione
-\texttt{-p 0}, e il suo effetto sulle prestazioni è misurato dalla campagna~F
+\texttt{-p 0}, e il suo effetto sulle prestazioni è misurato dalla campagna~E
 (\cref{sec:campagne}).
 
 % =====================================================================
@@ -795,7 +753,7 @@ decine di migliaia di byte. Il padding si può disattivare con l'opzione
 
 \subsection{Terminologia e kernel disponibili}\label{sec:terminologia}
 
-Due termini ricorrono in tutta la relazione e conviene distinguerli subito.
+Prima di passare alle descrizioni del codice, conviene ricordare i seguenti termini:
 
 Il \emph{nucleo di calcolo} è il termine della traccia: l'intera operazione
 $Y \leftarrow A\,X$ sulla matrice globale. Nella versione parallela comprende
@@ -805,7 +763,6 @@ tre fasi:
   \item il calcolo locale su ogni processo;
   \item la raccolta di $Y$.
 \end{itemize}
-Il suo tempo è quello usato per i GFLOPS (\cref{sec:metrica}).
 
 Un \emph{kernel} è invece una specifica implementazione del \emph{prodotto
 locale}, cioè del calcolo che ogni processo esegue sul proprio blocco di $A$.
@@ -830,7 +787,7 @@ allocare la memoria del backend.
     CUDA & \texttt{thread\_row} (0), \texttt{warp\_row} (1),
            \texttt{warp\_row\_xt} (2, default), \texttt{warp\_row\_smem} (3),
            \texttt{cublas} ($-1$, solo riferimento) \\
-    CPU  & \texttt{cpu\_row} (0), \texttt{cpu\_block} (1, default) \\
+    CPU  & \texttt{cpu\_row} (0), \texttt{cpu\_row\_reg} (1, default) \\
     \bottomrule
   \end{tabular}
 \end{table}
@@ -884,7 +841,9 @@ Questa divisione delle funzioni corrisponde proprio alle fasi da misurare
 \begin{itemize}
   \item \texttt{mxm.c} misura il calcolo solo attorno a \texttt{be\_compute},
         mentre i trasferimenti (\texttt{be\_set\_x} e \texttt{be\_get\_y}) sono
-        cronometrati a parte;
+        cronometrati a parte. Sulla GPU le copie usano \texttt{cudaMemcpy},
+        che ritorna solo a copia completata: quando \texttt{be\_set\_x}
+        termina, $X$ è già sulla GPU;
   \item sul backend CPU i dati si trovano già nella memoria della CPU, quindi
         \texttt{be\_set\_x} e \texttt{be\_get\_y} costano poco o nulla.
 \end{itemize}
@@ -926,26 +885,12 @@ Alcune parti restano sempre in doppia precisione, indipendentemente da
 \texttt{real\_t}: la \emph{generazione} dei valori, poi arrotondati a
 \texttt{real\_t} al momento della memorizzazione (\cref{sec:generazione}), e
 gli \emph{accumulatori del riferimento seriale}, che deve essere più accurato
-del codice che verifica (\cref{sec:collaudo}).
-
-Passare a \texttt{float} dimezza i byte per elemento: a parità di dati letti
-raddoppia l'intensità, cioè le operazioni per byte. Insieme al
-picco di calcolo 32 volte più alto della GPU in singola precisione
-(\cref{sec:gpu-hw}), questo spiega perché in \texttt{float} la GPU sia molto
-più veloce a $k$ piccolo. Il confronto tra le due precisioni, velocità contro
-errore, è discusso in \cref{sec:misure}.
+del codice che verifica (\cref{sec:verifica-distr}).
 
 % =====================================================================
 \section{Parallelizzazione con MPI}\label{sec:mpi}
 
 \subsection{Concetti di base}\label{sec:mpi-base}
-
-Un programma MPI è eseguito da più processi indipendenti, ciascuno con la
-propria memoria, che condividono dati solo scambiando messaggi. I processi
-sono raggruppati in \emph{comunicatori}, all'interno dei quali ognuno ha un
-identificativo, il \emph{rank}. All'avvio esiste solo
-\texttt{MPI\_COMM\_WORLD}, che li contiene tutti, e il programma può crearne
-altri su sottoinsiemi di processi.
 
 Le comunicazioni usate nel progetto sono tutte \emph{collettive}: coinvolgono
 tutti i processi di un comunicatore, che chiamano insieme la stessa funzione.
@@ -957,9 +902,9 @@ Il progetto ne usa due:
         vettore e la radice riceve la loro combinazione elemento per elemento,
         in questo progetto la somma.
 \end{itemize}
-Il centro del ragionamento è \emph{definire i comunicatori} e scegliere \emph{su quali comunicatori} eseguire queste due
+Il punto focale del ragionamento è \emph{definire i comunicatori} e scegliere \emph{su quali comunicatori} eseguire queste due
 operazioni, così che ogni messaggio raggiunga solo i processi che ne hanno
-bisogno (\cref{sec:griglia,sec:tre-passi}).
+bisogno.
 
 \subsection{Griglia cartesiana dei processi}\label{sec:griglia}
 
@@ -1007,17 +952,9 @@ MPI_Cart_sub(g->grid, keep_cols, &g->row);
 MPI_Cart_sub(g->grid, keep_rows, &g->col);
 \end{lstlisting}
 
-In alternativa si potrebbe usare \texttt{MPI\_Comm\_split}: ogni processo
-indica un numero, il proprio \emph{color}, e i processi con lo stesso colore
-finiscono nello stesso nuovo comunicatore, usando un colore per riga e uno
-per colonna.
-Con le topologie cartesiane, invece, è MPI a ricavare coordinate e
-gruppi a partire dalla forma della griglia.
-
 \texttt{grid\_create} riceve come parametro il comunicatore su cui costruire
 la griglia, invece di usare direttamente \texttt{MPI\_COMM\_WORLD}: la funzione
-è così riutilizzabile anche in un'applicazione più grande, che dedichi al
-prodotto solo una parte dei propri processi.
+è così riutilizzabile anche in un'applicazione più complessa.
 
 \subsection{Distribuzione dei dati}\label{sec:distribuzione}
 
@@ -1052,8 +989,7 @@ grande, non viene mai comunicata.
 La traccia consente di assumere che $X$ e $Y$ occupino una sola riga o colonna
 della griglia. Si è scelto che $X$ stia sulla riga~0, dove il processo
 $(0, c)$ possiede $X_c$, e che $Y$ si trovi alla fine sulla colonna~0, dove il
-processo $(r, 0)$ possiede $Y_r$ (\cref{fig:distribuzione}). Come visto in
-\cref{sec:layout}, in row-major $X_c$ e $Y_r$ sono aree contigue, quindi le
+processo $(r, 0)$ possiede $Y_r$ (\cref{fig:distribuzione}). In row-major $X_c$ e $Y_r$, essendo righe consecutive, sono aree contigue: le
 comunicazioni operano direttamente su di esse.
 
 \begin{figure}[H]
@@ -1254,9 +1190,7 @@ Il volume totale è quindi
 Le due divisioni a una dimensione sono i casi estremi: con $P_c = 1$ non c'è
 riduzione e $V = (P - 1)\, N k$, con $P_r = 1$ non c'è broadcast e
 $V = (P - 1)\, M k$. Una griglia quadrata ripartisce invece il volume tra le
-due comunicazioni: con 16 processi su una matrice quadrata, la griglia
-$4 \times 4$ muove $6\, N k$ elementi, contro i $15\, N k$ della $16 \times 1$,
-cioè 2,5 volte meno.
+due comunicazioni.
 
 A parità di numero di processi, la griglia che muove meno dati dipende però
 dalla forma della matrice. \Cref{tab:volume} riporta il volume con 4 processi, in
@@ -1283,7 +1217,7 @@ unità di $N k$:
   \end{tabular}
 \end{table}
 
-\paragraph{Dal volume al tempo.} Il volume totale non è ancora il tempo. MPI non
+\paragraph{Dal volume al tempo.} Oltre il volume va tenuto conto del tempo necessario per effettuare le comunicazioni. MPI non
 invia i dati a un processo per volta, cosa che richiederebbe $p - 1$ passi
 successivi: usa algoritmi ad albero, in cui a ogni passo il numero di processi
 coinvolti raddoppia, e bastano circa $\log_2 p$ passi, con $p$ pari a $P_r$ nel
@@ -1291,14 +1225,7 @@ broadcast e a $P_c$ nella riduzione. Il tempo dipende quindi soprattutto da due
 fattori: \textbf{la dimensione del messaggio di ogni processo e il numero di
 processi del gruppo}. La griglia li riduce entrambi rispetto alle divisioni a una
 dimensione. A parità di messaggio, inoltre, la riduzione costa più del
-broadcast, in parte perché oltre a spostare i dati deve sommarli: l'effetto è
-misurato in \cref{sec:ris-mpi}.
-
-\paragraph{Perché non si divide lungo $k$.} $X$ e $Y$ si dividono solo per
-righe, e ogni processo ha sempre tutte le $k$ colonne. Dividerle lungo $k$
-costringerebbe a duplicare $A$, perché ogni colonna di $Y$ richiede righe
-intere di $A$. Ridurrebbe inoltre il riuso di $A$ nei kernel. Infine
-produrrebbe messaggi di pochi valori, dominati dalla latenza.
+broadcast, in parte perché oltre a spostare i dati deve sommarli.
 
 \subsection{Assegnazione delle GPU ai processi}\label{sec:gpu-assign}
 
@@ -1316,38 +1243,25 @@ il suo \emph{rank locale} sul nodo, e il backend sceglie la GPU con
 \]
 così che i processi di un nodo si distribuiscano a turno sulle sue GPU.
 
-Sul server c'è un solo nodo con una sola GPU: il risultato dell'operazione è
-sempre 0, e tutti i processi usano la stessa GPU, contendendosela
-(\cref{sec:misure}). Su questa macchina il meccanismo non ha quindi effetto:
+Sebben su questa macchina il meccanismo non abbia effetto:
 serve però alla \emph{portabilità}. Il codice è pensato per usare correttamente
 più GPU, su uno o più nodi, senza modifiche, e quindi per poter scalare su una
-macchina diversa. Lo scenario con una GPU per processo, qui non disponibile, è invece simulato
+macchina diversa. Lo scenario con una GPU per processo, fisicamente non disponibile, è invece simulato
 dalla modalità a nodi emulati (\cref{sec:misure}).
 
 % =====================================================================
 \section{Implementazione su GPU (CUDA)}\label{sec:gpu}
 
-\paragraph{Come sono misurati i kernel.} Tutti i kernel di questo capitolo sono
-stati misurati nelle stesse condizioni: matrice quadrata $16384 \times 16384$,
-un solo processo, i cinque valori di $k$ della traccia (campagna~B,
-\cref{sec:gruppi}). I risultati sono riportati alla fine della sezione di
-ciascun kernel e riassunti in \cref{sec:gpu-riepilogo}, dove ogni kernel è
-confrontato con i tetti della roofline (\cref{sec:roofline}). I GFLOPS sono
-calcolati con il tempo del nucleo, la metrica richiesta dalla traccia
-(\cref{sec:metrica}). Con un solo processo broadcast e riduzione non
-comunicano nulla, e il tempo del nucleo supera quello del solo calcolo
-dell'\SIrange{1}{3}{\percent} nella maggior parte dei casi. La differenza
-arriva all'\SI{8}{\percent} solo per cuBLAS in \texttt{float} a $k = 32$,
-dove il calcolo dura appena \SI{4}{ms} e la riduzione, che con un solo
-processo si limita a copiare $Y$, pesa di più.
+\paragraph{Come sono misurati i kernel.} I risultati riportati alla fine di
+ogni sezione si riferiscono tutti alla stessa misura: matrice quadrata
+$16384 \times 16384$, un solo processo, i cinque valori di $k$ della traccia
+(campagna~B, \cref{sec:gruppi}), con i GFLOPS calcolati sul tempo del nucleo
+(\cref{sec:metrica}). Il confronto con i tetti della roofline è in
+\cref{sec:gpu-riepilogo}.
 
 \subsection{Modello di programmazione CUDA}\label{sec:cuda-modello}
 
-In CUDA la CPU (\emph{host}) e la GPU (\emph{device}) hanno memorie separate:
-i dati vanno copiati esplicitamente dall'una all'altra, e un puntatore alla
-memoria della GPU non si può usare dalla CPU.
-
-Un \emph{kernel} è una funzione eseguita sulla GPU da molti thread in
+Un \emph{kernel} come già detto è una funzione eseguita sulla GPU da molti thread in
 parallelo. I thread sono raggruppati in \emph{blocchi}, fino a 1024 thread
 ciascuno, e i blocchi formano la \emph{griglia}. La GPU assegna ogni blocco a
 uno SM, che lo esegue a gruppi di 32 thread, i \emph{warp}: i 32 thread di un
@@ -1369,12 +1283,6 @@ sincronizzazione esplicita. Ne seguono due conseguenze per il progetto:
 
 \subsection{Accessi alla memoria globale}\label{sec:coalescenza}
 
-Quando un warp esegue una lettura dalla memoria globale, i 32 thread chiedono
-ciascuno un indirizzo. L'hardware non serve le richieste una per una: le
-raggruppa per \emph{settori} da \SI{32}{byte} e legge ogni settore toccato una
-sola volta. Il costo di una lettura dipende quindi da quanti settori distinti
-il warp tocca, non solo da quanti byte servono davvero.
-
 Si parla di \emph{coalescenza} quando le richieste dei 32 thread di un warp si
 raggruppano in pochi settori, cosa che dipende da quanto sono vicini gli
 indirizzi letti:
@@ -1389,10 +1297,8 @@ L1 conserva i dati.
 \paragraph{Accesso non coalescente:} Se i 32 thread leggono elementi distanti
 tra loro, ad esempio lo stesso elemento $j$ di 32 righe diverse di $A$, ogni
 thread tocca un settore diverso: il warp legge 32 settori, cioè
-\SI{1024}{byte}, per usarne 256, con un'efficienza del \SI{25}{\percent} in
-\texttt{double} e del \SI{12.5}{\percent} in \texttt{float}. Poiché a $k$
-piccolo il nucleo è limitato dalla banda, leggere quattro volte i byte
-necessari significa andare fino a quattro volte più lenti.
+\SI{1024}{byte},  con un'efficienza del \SI{25}{\percent} in
+\texttt{double} e del \SI{12.5}{\percent} in \texttt{float}. Questo significa andare fino a quattro volte più lenti.
 
 Il criterio che guida la suddivisione del lavoro tra i thread
 (\crefrange{sec:thread-row}{sec:warp-smem}) è quindi che i thread di uno
@@ -1400,11 +1306,37 @@ stesso warp leggano elementi adiacenti per garantire la coalescenza.
 
 \subsection{Versione di partenza: \texttt{thread\_row}}\label{sec:thread-row}
 
-Il primo kernel è la traduzione più diretta del prodotto: un thread per ogni
-riga di $Y$. Il thread $i$ calcola da solo l'intera riga $i$ di $Y$, con $k$
-prodotti scalari tra la riga $i$ di $A$ e le colonne di $X$. I thread sono
-raggruppati in blocchi da 128, e la griglia ha tanti blocchi quanti ne servono
-a coprire le $M$ righe.
+Il primo kernel è la traduzione più diretta del prodotto: in ogni processo, un
+thread per ogni riga del suo blocco di $A$. Come tutti i kernel, lavora solo
+sul blocco locale (\cref{sec:tre-passi}): il thread $i$ calcola da solo la
+riga $i$ del risultato locale, con $k$ prodotti scalari tra la riga $i$ del
+blocco e le colonne di $X$. I thread sono raggruppati in blocchi da 128, e la
+griglia ha tanti blocchi quanti ne servono a coprire le righe del sotto-blocco locale di $A$.
+
+\begin{lstlisting}[caption={Kernel e lancio di \texttt{thread\_row} (\texttt{kernel\_thread\_row.cu}).}, label={lst:thread-row}]
+__global__ void k_thread_row(int M, int N, int k,
+                             const real_t *__restrict__ A, int lda,
+                             const real_t *__restrict__ X,
+                             real_t *__restrict__ Y)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;   /* riga */
+    if (i >= M) return;            /* thread in eccesso */
+
+    for (int c = 0; c < k; c++) {
+        real_t s = 0;
+        for (int j = 0; j < N; j++)
+            s += A[IDX(i, j, lda)] * X[IDX(j, c, k)];
+        Y[IDX(i, c, k)] = s;
+    }
+}
+
+void launch_thread_row(int M, int N, int k, const real_t *A, int lda,
+                       const real_t *X, real_t *Y)
+{
+    int blocks = (M + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
+    k_thread_row<<<blocks, THREADS_PER_BLOCK>>>(M, N, k, A, lda, X, Y);
+}
+\end{lstlisting}
 
 Il kernel è volutamente semplice e fa da riferimento per misurare il guadagno
 delle versioni successive. Presenta tre difetti, che le versioni seguenti
@@ -1802,11 +1734,45 @@ $Y$:
 \end{itemize}
 
 \paragraph{Il limite: le letture di $X$.} Ogni lane legge la riga di $X$
-corrispondente al proprio elemento di $A$. Per una colonna $c$ fissata, le 32
+corrispondente al proprio elemento di $A$ (\cref{fig:letture-x}). Per una colonna $c$ fissata, le 32
 lane leggono gli elementi $c$ di 32 righe consecutive di $X$, che in
 row-major distano $k$ posizioni l'uno dall'altro: la lettura non è
 coalescente, e lo è sempre meno al crescere di $k$. Per questo le prestazioni
 di \texttt{warp\_row} calano all'aumentare di $k$.
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[
+    font=\footnotesize,
+    cell/.style={draw, fill=blue!6, minimum width=0.42cm, minimum height=0.45cm, inner sep=0pt},
+    hit/.style={draw, fill=orange!45, minimum width=0.42cm, minimum height=0.45cm, inner sep=0pt},
+    la/.style={-{Stealth[length=1.6mm]}, orange!70!black},
+    lab/.style={font=\scriptsize, align=center}]
+    \foreach \r in {0,1,2} {
+      \foreach \e in {0,...,3} {
+        \pgfmathsetmacro{\x}{(\r*4+\e)*0.42}
+        \ifnum\e=1 \node[hit] (h\r) at (\x, 0) {}; \else \node[cell] at (\x, 0) {}; \fi
+      }
+    }
+    \node[font=\scriptsize, text=black!60] at (0.63, 0.95) {riga $j$};
+    \node[font=\scriptsize, text=black!60] at (2.31, 0.95) {riga $j{+}1$};
+    \node[font=\scriptsize, text=black!60] at (3.99, 0.95) {riga $j{+}2$};
+    \node at (5.45, 0) {$\cdots$};
+    \foreach \e in {0,...,3} {
+      \pgfmathsetmacro{\x}{6.1+\e*0.42}
+      \ifnum\e=1 \node[hit] (h31) at (\x, 0) {}; \else \node[cell] at (\x, 0) {}; \fi
+    }
+    \node[font=\scriptsize, text=black!60] at (6.73, 0.95) {riga $j{+}31$};
+    \foreach \r in {0,1,2,31} \draw[la] (h\r.south) ++(0,-0.6) node[below, font=\scriptsize] {lane \r} -- (h\r.south);
+    \draw[decorate, decoration={brace, amplitude=3pt}, black!60] (0.42,0.3) -- (2.1,0.3)
+      node[midway, above=2pt, lab, text=black!60] {$k$};
+    \node[lab, text=orange!70!black, anchor=west] at (7.6, 0) {32 elementi\\a passo $k$:\\non coalescente};
+  \end{tikzpicture}
+  \caption{Letture di $X$ in un warp di \texttt{warp\_row}, con $k = 4$ e
+    colonna $c = 1$: le 32 lane leggono l'elemento $c$ di 32 righe consecutive
+    di $X$, a distanza di $k$ posizioni, e la lettura non è
+    coalescente.}\label{fig:letture-x}
+\end{figure}
 
 \paragraph{Risultato.} \texttt{warp\_row} fa un salto di quasi 10 volte
 rispetto a \texttt{thread\_row}: 296~GFLOPS a $k = 3$ e 348 a $k = 6$, molto
@@ -1843,7 +1809,7 @@ for (int j = lane; j < N; j += WARP_SIZE) {
 
 \paragraph{Perché non tenere $X$ trasposta ovunque.} Il layout migliore
 dipende da chi legge. La parte MPI e la CPU usano $X$ row-major: le righe
-consecutive formano un blocco contiguo per il broadcast (\cref{sec:layout}), e
+consecutive formano un blocco contiguo per il broadcast (\cref{sec:distribuzione}), e
 sulla CPU le righe contigue servono ai registri vettoriali (\cref{sec:cpu}).
 La trasposta si crea quindi solo sulla GPU, dove serve.
 
@@ -1880,6 +1846,12 @@ piccolo: a ogni giro un warp legge 32 elementi di $A$ e $32 K_C$ elementi di
 $X^T$, quindi le richieste per $X$ sono $K_C$ volte quelle per $A$. Con
 $k = 32$ in \texttt{double} e $N = 16384$, $X^T$ occupa \SI{4}{MiB}, quanto
 l'intera cache L2.
+
+\paragraph{Dimensione del tile.} Un tile è la porzione di $X^T$ che il blocco
+tiene in memoria shared in un dato momento: $K_C$ righe da $T_C$ colonne, cioè
+$K_C\,T_C$ elementi. Conviene che sia grande, perché ogni tile richiede un
+caricamento e due sincronizzazioni, ma la memoria shared è limitata, e la
+dimensione va scelta di conseguenza.
 
 \begin{figure}[H]
   \centering
@@ -1985,12 +1957,6 @@ for (int j0 = 0; j0 < N; j0 += TC) {
 }
 \end{lstlisting}
 
-\paragraph{Dimensione del tile.} Un tile è la porzione di $X^T$ che il blocco
-tiene in memoria shared in un dato momento: $K_C$ righe da $T_C$ colonne, cioè
-$K_C\,T_C$ elementi. Conviene che sia grande, perché ogni tile richiede un
-caricamento e due sincronizzazioni, ma la memoria shared è limitata, e la
-dimensione va scelta di conseguenza.
-
 Il limite è fissato a \SI{16}{KiB} per blocco. Uno SM dispone di
 \SI{64}{KiB} di shared e ospita al più 4 blocchi da 256 thread: con
 \SI{16}{KiB} ciascuno i 4 blocchi ci stanno tutti, e la shared non riduce il
@@ -2021,7 +1987,7 @@ kernel le 32 lane di un warp leggono 32 elementi consecutivi della stessa riga
 del tile (\cref{lst:warp-smem}): le richieste si distribuiscono in modo
 uniforme su tutti i banchi, e non ci sono conflitti evitabili. In
 \texttt{double} un warp chiede \SI{256}{byte}, il doppio di quanto i banchi
-servono in una passata: ne servono quindi due, che è il minimo possibile.
+servono in una passata(32 banchi da 4 = 128 byte), ne servono quindi due, che è il minimo possibile.
 
 \paragraph{Nessuna uscita anticipata.} Negli altri kernel i warp dell'ultimo
 blocco senza una riga da calcolare escono subito. Qui non possono:
@@ -2029,30 +1995,23 @@ blocco senza una riga da calcolare escono subito. Qui non possono:
 fossero già usciti il comportamento sarebbe indefinito. I warp senza riga
 partecipano quindi al caricamento e alle barriere, e saltano solo il calcolo.
 
-\paragraph{Cosa ci si aspetta.} La L1 e la shared sono in effetti la stessa
-memoria fisica: se la L1 cattura già il riuso di $X$ tra i warp, il guadagno è
-piccolo, a maggior ragione perchè le barriere hanno un costo.
-
 \paragraph{Risultato.} \texttt{warp\_row\_smem} va quasi come
 \texttt{warp\_row\_xt}, ma sempre un po' meno, fino a 331 contro 352 a
 $k = 32$. Tenere $X$ nella memoria shared non porta vantaggi, probabilmente
 perché la cache L1 riusava già $X$ tra i warp e le barriere hanno un costo.
-% NOTA: ipotesi coerente con i dati, non misurata: possibile verifica con il
-% profiler (tasso di hit della cache L1 di warp_row_xt).
 
 \subsection{Registri e occupazione}\label{sec:registri}
 
-\paragraph{Perché servono molti warp?} A $k$ piccolo i kernel sono limitati
-dalla memoria: un warp che chiede un dato deve attendere centinaia di cicli
+A $k$ piccolo i kernel sono limitati dalla memoria: un warp che chiede un dato deve attendere centinaia di cicli
 prima di riceverlo. Lo SM nasconde questa attesa facendo lavorare nel
 frattempo altri warp: più warp sono \emph{residenti} su uno SM, più l'attesa
 viene coperta. Il rapporto tra i warp residenti e il massimo possibile (32 per
 SM) viene chiamato \emph{occupazione}.
 
-\paragraph{I registri limitano l'occupazione.} Uno SM ha \num{65536} registri
+\paragraph{Registri e occupazione:} Uno SM ha \num{65536} registri
 da 32 bit, divisi tra tutti i thread residenti. Per avere 4 blocchi da 256
 thread, cioè il massimo di 1024 thread, ogni thread può usare al più 64 registri: se ne usa di più, sullo SM entrano meno blocchi. Nei kernel del
-progetto la voce principale sono gli accumulatori: $K_C$ valori per thread,
+progetto la voce principale da tenere in registro sono gli accumulatori: $K_C$ valori per thread,
 ciascuno di due registri in \texttt{double}. Con $k = 32$ in \texttt{double} i
 soli accumulatori occupano già 64 registri.
 
@@ -2067,7 +2026,7 @@ con $K_C$ istruzioni separate, \texttt{acc[0] += \dots},
 \texttt{acc[1] += \dots}, e così via, ciascuna con un indice costante. Per
 questo tutti i cicli sulle colonne sono srotolati completamente.
 
-\paragraph{Il costo: il caso \texttt{warp\_row\_smem}.} Srotolare può però
+\paragraph{Il costo dello srotolamento:} Srotolare può però
 aumentare i registri usati. In \texttt{warp\_row\_smem} due cicli si ripetono
 per ogni tile:
 \begin{itemize}
@@ -2078,11 +2037,13 @@ per ogni tile:
 Se anche questi vengono srotolati completamente, il compilatore si accorge che
 le posizioni da cui ogni thread legge sono le stesse in ogni tile, spostate
 solo dell'inizio del tile: calcola allora tutti quegli indirizzi una volta
-sola, prima di cominciare, e li tiene in registri per tutta l'esecuzione. Con
-$k = 32$ in \texttt{double} si arriva a 190 registri per thread, quindi a un
-solo blocco per SM.
+sola, prima di cominciare, e li tiene in registri per tutta l'esecuzione. Ogni
+thread deve quindi conservare, oltre agli accumulatori, un indirizzo per ogni
+elemento che carica in un tile, e il loro numero cresce con $K_C$: a $k = 32$
+in \texttt{double} i registri superano di molto il limite di 64, e sullo SM
+entra un solo blocco.
 
-\paragraph{La soluzione: srotolare solo in parte.} Con
+\paragraph{Srotolare solo in parte, il compromesso:} Con
 \texttt{\#pragma unroll 4} sul caricamento e \texttt{\#pragma unroll 2} sul
 calcolo, il compilatore srotola 4 e 2 iterazioni alla volta: restano
 abbastanza letture in corso per tenere occupata la memoria, ma gli indirizzi
@@ -2094,11 +2055,6 @@ blocchi per SM, come in \texttt{warp\_row\_xt}.
 \paragraph{Spill.} Se un thread avesse bisogno di più registri di quanti
 l'hardware ne permette, il compilatore sposterebbe alcuni valori nella
 \emph{local memory} (\emph{spill}), con lo stesso costo della memoria globale.
-I registri usati da ogni kernel, ed eventualispill, sono riportati 
-dall'assemblatore della GPU con l'opzione \texttt{-v}: 
-nel progetto si ottengono con \texttt{make NVFLAGS\_EXTRA="-Xptxas -v"}
-(\cref{sec:compilazione}). I valori citati sono stati ottenuti con CUDA 12.8
-per \texttt{sm\_75}.
 
 \subsection{Confronto con cuBLAS}\label{sec:cublas}
 
@@ -2107,7 +2063,7 @@ di NVIDIA, ottimizzata per ogni architettura: il prodotto $Y = A\,X$ è un caso
 particolare della sua funzione \texttt{gemm}, il prodotto tra matrici
 generico. cuBLAS non fa parte della soluzione: serve a capire quanto i kernel
 scritti a mano si avvicinano, o si allontanano, da un'implementazione
-professionale, selezionabile con \texttt{-v -1}.
+di questo calibro, selezionabile con \texttt{-v -1}.
 
 cuBLAS lavora in column-major, mentre le
 matrici del progetto sono row-major. Non serve però convertirle: una matrice
@@ -2127,34 +2083,12 @@ dimensioni $m = k$, $n = M$ e dimensione interna $N$, passando $X$ prima di
 $A$. Il risultato, scritto in column-major come $Y^T$, è esattamente $Y$ in
 row-major. Non si copia nulla: cambia solo l'interpretazione dei dati. La
 leading dimension di $A$ si passa così com'è, quindi anche il padding delle
-righe è gestito.
+righe è gestito. Il confronto con gli altri kernel è riportato in
+\cref{sec:gpu-riepilogo}.
 
-\paragraph{Risultato.} cuBLAS, sorprendentemente, è il più lento di tutti in
-\texttt{double} a $k = 3$ e $k = 6$, con 16 e 31~GFLOPS, meno anche di \texttt{thread\_row}, e lo supera solo da $k = 8$ e arriva a 162 a $k = 32$. Il
-suo tempo resta quasi costante, circa \SI{0.1}{s}, qualunque sia $k$: in
-pratica cuBLAS lavora come se $k$ fosse sempre grande, ed è pensato per il
-prodotto tra matrici, non per multivettori con poche colonne. In
-\texttt{float}, a $k$ grande, è invece il più veloce (\cref{sec:gpu-riepilogo}).
+\subsection{Eventi CUDA}\label{sec:h2d}
 
-\subsection{Trasferimenti host--device ed eventi CUDA}\label{sec:h2d}
-
-\paragraph{Trasferimenti.} Per tutti i kernel, il backend CUDA sposta i dati tra CPU e GPU in tre
-momenti:
-\begin{itemize}
-  \item $A$, una sola volta, in \texttt{be\_create}, con
-        \texttt{cudaMemcpy2D}, che copia riga per riga solo i dati e non il
-        padding (\cref{sec:padding});
-  \item $X$, a ogni invocazione, in \texttt{be\_set\_x}, con eventuale
-        trasposizione;
-  \item $Y$, a ogni invocazione, in \texttt{be\_get\_y}, verso la CPU.
-\end{itemize}
-$X$ e $Y$ devono passare per la CPU a ogni invocazione perché MPI non è
-CUDA-aware (\cref{sec:calcpar}). Come chiede la traccia, questi trasferimenti
-sono esclusi dal tempo del nucleo e misurati a parte (\cref{sec:metrica}). Le
-copie usano \texttt{cudaMemcpy}, che ritorna solo a copia completata: quando
-\texttt{be\_set\_x} termina, $X$ è già sulla GPU.
-
-\paragraph{Eventi CUDA.} Poiché il lancio di un kernel è asincrono
+Poiché il lancio di un kernel è asincrono
 (\cref{sec:cuda-modello}), il tempo del calcolo sulla GPU si misura con gli
 \emph{eventi CUDA}:
 \begin{enumerate}
@@ -2176,7 +2110,10 @@ le due, rilevanti quando più processi condividono la GPU, sono discusse in
 \subsection{Riepilogo dei kernel GPU}\label{sec:gpu-riepilogo}
 
 La \cref{tab:ris-kernel} e la \cref{fig:kernel-k} riassumono i GFLOPS
-di tutti i kernel GPU.
+di tutti i kernel GPU. \texttt{thread\_row} e \texttt{warp\_row} sono misurati
+solo in \texttt{double}: sono tappe intermedie, già superate da
+\texttt{warp\_row\_xt}, e i loro limiti ($A$ riletta $k$ volte, accessi non
+coalescenti) dipendono dal modo di leggere la memoria, non dalla precisione.
 
 \begin{table}[H]
   \centering
@@ -2245,8 +2182,7 @@ di tutti i kernel GPU.
     $407 \cdot k/2$ (\cref{sec:roofline}).}\label{fig:kernel-k}
 \end{figure}
 
-\paragraph{GPU in \texttt{float}.} In singola precisione il tetto del calcolo è
-molto più alto, e per tutti i $k$ della traccia il limite teorico è la memoria
+In singola precisione le prestazioni sono molto più alte:
 (\cref{sec:roofline}).
 \begin{itemize}
   \item Fino a $k = 8$, \texttt{warp\_row\_xt} segue il tetto della memoria quasi
@@ -2262,17 +2198,17 @@ molto più alto, e per tutti i $k$ della traccia il limite teorico è la memoria
         calcolo si ferma prima, a 374~GFLOPS.
 % NOTA: ipotesi coerente con i dati, non misurata: possibile verifica con il
 % profiler (occupazione della cache L1 di warp_row_xt in float a k grande).
-  \item \texttt{warp\_row\_smem} va di nuovo un po' meno di
+  \item \texttt{warp\_row\_smem} va un po' meno di
         \texttt{warp\_row\_xt}, come in \texttt{double}.
-  \item cuBLAS parte sotto \texttt{warp\_row\_xt} (429~GFLOPS a $k = 3$), ma a
-        $k$ grande lo supera nettamente: 2759~GFLOPS a $k = 20$ e 4285 a
-        $k = 32$, cioè 1,6 e 2,3 volte di più. È il caso in cui conviene usare
-        la libreria. Il codice interno di cuBLAS non è noto, ma un'ipotesi
-        plausibile è che riusi ogni valore di $X$ per più righe di $A$, come fa
-        \texttt{cpu\_block} sulla CPU, leggendo così meno dati dalla cache per
-        ogni operazione. Sarebbe anche un possibile sviluppo per
-        \texttt{warp\_row\_xt}: calcolare più righe per warp.
 \end{itemize}
+
+cuBLAS, sorprendentemente, è il più lento
+di tutti in \texttt{double} a $k = 3$ e $k = 6$, con 16 e 31~GFLOPS, meno anche
+di \texttt{thread\_row}, e lo supera solo da $k = 8$ e arriva a 162 a $k = 32$.
+Il suo tempo resta quasi costante, circa \SI{0.1}{s}, qualunque sia $k$: in
+pratica cuBLAS lavora come se $k$ fosse sempre grande, ed è pensato per il
+prodotto tra matrici, non per multivettori con poche colonne. In
+\texttt{float}, invece, a $k$ grande è il più veloce.
 
 % =====================================================================
 \section{Implementazione CPU-based}\label{sec:cpu}
@@ -2283,7 +2219,7 @@ sviluppata comunque, sia per averre un termine di paragone con la GPU,
 sia per una questione di \emph{hardware del server},
 che ha una sola GPU ma 20 core fisici: una versione che usa solo MPI 
 permette di sfruttare tutti i core, mentre nella versione
- CUDA i processi sono limitati dalla condivisione dell'unica GPU.
+ CUDA usare più processi limiterebbe la run a causa della condivisione dell'unica GPU.
 
 In questa versione ogni processo calcola il proprio blocco su un solo core, e
 il parallelismo è dato interamente dal numero di processi: sul server si lancia
@@ -2291,23 +2227,20 @@ un processo per core fisico, fino a 20 (\cref{sec:binding}). Rispetto al
 backend CUDA naturalmente non servono trasferimenti tra CPU e GPU: $A$, $X$ e
 $Y$ si trovano già nella memoria della CPU. Il backend legge $X$ direttamente
 dal buffer di \texttt{mxm.c}, senza copiarla, mentre $Y$ viene solo copiata nel
-buffer della riduzione.
-
-\paragraph{Come sono misurati i kernel.} I kernel CPU sono misurati sulla
+buffer della riduzione. I kernel CPU sono misurati sulla
 stessa matrice dei kernel GPU, $16384 \times 16384$, con 20 processi su una
-griglia $4 \times 5$ (campagna~B). Il riferimento è il tetto della memoria,
-$71 \cdot k/4$: 53~GFLOPS a $k = 3$, 142 a $k = 8$ e 568 a $k = 32$. Il picco di calcolo della CPU non è stato misurato.
+griglia $4 \times 5$ (campagna~B).
 
 \subsection{Versione di partenza: \texttt{cpu\_row}}\label{sec:cpu-row}
 
 Il primo kernel calcola una riga di $Y$ alla volta, con lo stesso ordine dei
-cicli del riferimento seriale (\cref{sec:collaudo}): per ogni riga $i$ scorre
+cicli del riferimento seriale (\cref{sec:verifica-distr}): per ogni riga $i$ scorre
 la riga $i$ di $A$, e ogni elemento $a_{ij}$, letto una sola volta, viene
 moltiplicato per l'intera riga $j$ di $X$, aggiornando i $k$ accumulatori della
 riga $i$ di $Y$, in questo modo quindi l'intera matrice $A$ attraversa la memoria una sola volta.
 
 Come \texttt{thread\_row} sulla GPU, il kernel è volutamente semplice e fa da
-riferimento. Presenta due limiti, risolti dal prossimo kernel:
+riferimento. Presenta due limiti, e il prossimo kernel risolve il primo:
 \begin{itemize}
   \item \emph{accumulatori in memoria}: $k$ è noto solo a tempo di esecuzione,
         quindi gli accumulatori stanno in un array in memoria, cioè nella cache
@@ -2319,164 +2252,54 @@ riferimento. Presenta due limiti, risolti dal prossimo kernel:
         la memoria che a calcolare.
 \end{itemize}
 
-\paragraph{Risultato.} \texttt{cpu\_row} cresce con $k$, ma sempre meno: da
-46~GFLOPS a $k = 3$ fino a soli 124 a $k = 32$. Il limite sono gli
-accumulatori tenuti in memoria: a ogni operazione il core deve leggere e
-riscrivere un accumulatore, e questo lavoro in più cresce con $k$.
+\paragraph{Risultato.} \texttt{cpu\_row} va da 46~GFLOPS a $k = 3$ a 123 a
+$k = 32$: a ogni operazione il core deve leggere e riscrivere un accumulatore in
+memoria. A $k = 20$ scende a 71, e la riduzione dura 69~ms invece di 1--16:
+alcuni processi finiscono il calcolo molto dopo gli altri, forse per la
+posizione in memoria dell'array degli accumulatori (ipotesi non verificata).
 
-\subsection{Register blocking: \texttt{cpu\_block}}\label{sec:cpu-block}
+\subsection{Accumulatori in registri: \texttt{cpu\_row\_reg}}\label{sec:cpu-block}
 
-\texttt{cpu\_row} riusa $A$, perché ogni elemento serve
-$k$ colonne, ma non $X$, perché ogni valore di $X$ letto serve una sola riga.
-\texttt{cpu\_block} calcola invece $R_B$ righe di $Y$ insieme:
+\texttt{cpu\_row\_reg} mantiene l'ordine dei cicli di \texttt{cpu\_row}: una
+riga di $Y$ alla volta, con $A$ letta una sola volta e ogni elemento $a_{ij}$
+usato per tutte le $k$ colonne. Cambia solo dove stanno gli
+\emph{accumulatori}, cioè le variabili in cui si somma, termine dopo termine,
+un elemento di $Y$: in \texttt{cpu\_row} sono un array in memoria, qui stanno
+nei registri, e ogni aggiornamento non richiede più una lettura e una scrittura.
 
-\begin{center}
-\fbox{\begin{minipage}{0.85\textwidth}\small
-\begin{tabbing}
-\hspace{1.5em}\=\hspace{1.5em}\=\hspace{1.5em}\=\kill
-per ogni $j$ da $0$ a $N-1$:\\
-\>leggi la riga $j$ di $X$, cioè $k$ valori, \emph{una volta}\\
-\>per ognuna delle $R_B$ righe $r$ del blocco:\\
-\>\>leggi $a = A[r][j]$\\
-\>\>aggiorna i $k$ accumulatori della riga $r$:
-  $\mathit{acc}[r][c] \mathrel{+}= a \cdot x[c]$
-\end{tabbing}
-\end{minipage}}
-\end{center}
+\paragraph{Dimensioni note in compilazione.} Come sulla GPU
+(\cref{sec:warp-row}), un array sta nei registri solo se il compilatore ne
+conosce la dimensione. Il calcolo è quindi scritto in una funzione
+\texttt{always\_inline}, che il compilatore deve espandere, chiamata con il
+numero di colonne $K_C$ costante: per ogni $k$ della traccia il compilatore
+genera una copia dedicata, con il ciclo sulle colonne completamente srotolato
+(\cref{lst:cpu-block}). Per ogni altro $k$ si procede a fette di 8 colonne,
+come in \texttt{warp\_row}.
 
-Si ottengono due forme di riuso, una per ciascun operando:
-\begin{itemize}
-  \item \emph{riuso di $A$}: ogni elemento $a$ viene usato $k$ volte, come in
-        \texttt{cpu\_row};
-  \item \emph{riuso di $X$}: ogni valore $x$ viene usato $R_B$ volte, quindi
-        le letture di $X$ per operazione si riducono di un fattore $R_B$.
-\end{itemize}
-$A$ viene comunque letta una sola volta, perché le $R_B$ righe si scorrono
-insieme. È lo stesso principio di \texttt{warp\_row\_smem}
-(\cref{sec:warp-smem}): lì $X$ si riusa tra 8 righe tenendola in memoria
-shared, qui tra $R_B$ righe tenendola nei registri.
-
-\paragraph{Gli accumulatori.} Un \emph{accumulatore} è la variabile in cui si
-somma, termine dopo termine, un elemento di $Y$:
-$y_{rc} = \sum_j a_{rj}\, x_{jc}$. Un blocco ne richiede $R_B \times k$, uno per
-ogni elemento del blocco di $Y$ in calcolo. Perché il riuso sia efficace
-devono stare tutti nei registri, da cui il nome \emph{register blocking}: in
-memoria, ogni aggiornamento richiederebbe una lettura e una scrittura, come in
-\texttt{cpu\_row}.
-
-\paragraph{Dimensioni note in compilazione.} Esattamente come in GPU, gli accumulatori
-stanno nei registri solo se il compilatore conosce $R_B$ e $k$.
-Si usa quindi una funzione \texttt{always\_inline}, che il
-compilatore deve espandere, chiamata con argomenti
-costanti. Per ogni coppia $(R_B, k)$ il compilatore genera così una copia
-dedicata della funzione, con i cicli sulle righe e sulle colonne completamente
-srotolati. Il ciclo corrispondente nel codice è riportato nel
-\cref{lst:cpu-block}: i due \texttt{\#pragma GCC unroll} srotolano
-completamente i cicli sulle righe e sulle colonne (al più $8 \times 32$
-iterazioni). Per i $k$ della traccia esiste una versione con $A$ letta una volta, mentre per ogni altro $k$ si procede a fette di 8 colonne, come in
-\texttt{warp\_row} (\cref{sec:warp-row}).
-
-\begin{lstlisting}[caption={Ciclo principale di \texttt{cpu\_block} (\texttt{kernel\_cpu\_block.c}).}, label={lst:cpu-block}]
-for (int j = 0; j < N; j++) {
-    const real_t *xrow = X + (size_t)j * k;          /* riga j di X (fetta) */
-#pragma GCC unroll 8
-    for (int r = 0; r < rb; r++) {
-        const real_t a = A[(size_t)r * lda + j];     /* a riusato kc volte  */
+\begin{lstlisting}[caption={Ciclo principale di \texttt{cpu\_row\_reg} (\texttt{kernel\_cpu\_row\_reg.c}).}, label={lst:cpu-block}]
+for (int i = 0; i < M; i++) {
+    const real_t *arow = A + (size_t)i * lda;
+    real_t acc[32] = { 0 };                          /* in registri         */
+    for (int j = 0; j < N; j++) {
+        const real_t a = arow[j];                    /* letto una volta     */
+        const real_t *xrow = X + (size_t)j * k + c0; /* riga j di X (fetta) */
 #pragma GCC unroll 32
-        for (int c = 0; c < kc; c++)
-            acc[r][c] += a * xrow[c];                /* x riusato rb volte  */
+        for (int c = 0; c < KC; c++)
+            acc[c] += a * xrow[c];                   /* a riusato KC volte  */
     }
+    for (int c = 0; c < KC; c++)
+        Y[(size_t)i * k + c0 + c] = acc[c];
 }
 \end{lstlisting}
 
-\subsection{Registri vettoriali e vettorizzazione}\label{sec:vettorizzazione}
+Resta invece il secondo limite di \texttt{cpu\_row}: ogni valore di $X$ letto
+serve ancora una sola riga di $A$.
 
-\paragraph{Registri vettoriali.} Un registro vettoriale contiene più valori, e
-un'unica istruzione può operare contemporaneamente su tutti i valori del registro
-(\emph{SIMD}, \emph{Single Instruction, Multiple Data}). Lo Xeon del server ha
-32 registri vettoriali (AVX-512). Il compilatore, con le opzioni del progetto,
-li usa da 256 bit, cioè 4 \texttt{double} o 8 \texttt{float} l'uno. In tutto i
-registri contengono quindi 128 \texttt{double} o 256 \texttt{float}.
-
-\paragraph{Quante righe per blocco.} $R_B$, il numero di righe di $Y$ calcolate
-insieme (\cref{sec:cpu-block}), è vincolato proprio da questa capacità: gli
-$R_B \times k$ accumulatori devono stare nei registri, quindi $R_B \times k$
-non può superare un \emph{budget} \texttt{ACC\_BUDGET}, pari a , come appena detto, 128
-accumulatori in \texttt{double} e 256 in \texttt{float}, cioè \SI{1024}{byte}
-di registri. Ne segue:
-\[
-  R_B = \left\lfloor \frac{\texttt{ACC\_BUDGET}}{k} \right\rfloor ,
-\]
-limitato tra 1 e 8 (\cref{lst:rb}). Il limite inferiore è una protezione: il
-budget si può cambiare in compilazione, e se fosse più piccolo di $k$ la
-divisione darebbe 0 righe. Il limite superiore serve innanzitutto al
-compilatore: gli accumulatori sono un array di dimensioni fisse,
-\texttt{acc[RB\_MAX][32]}, e il ciclo sulle righe viene srotolato al più 8
-volte. Senza questo limite, a $k$ piccolo si arriverebbe a $128/3 \approx 42$
-righe, ma non ci si attende un guadagno perché si arriverebbe a 42 flussi
-distinti, più di quanti cache e prefetch gestiscano bene.
-
-\begin{lstlisting}[caption={Calcolo di $R_B$ (\texttt{kernel\_cpu\_block.c}).}, label={lst:rb}]
-#define ACC_BUDGET (1024 / (int)sizeof(real_t))
-#define RB_MAX 8
-#define RB_FOR(kc) ((ACC_BUDGET / (kc)) > RB_MAX ? RB_MAX : \
-                    (ACC_BUDGET / (kc)) < 1 ? 1 : (ACC_BUDGET / (kc)))
-\end{lstlisting}
-
-\begin{table}[H]
-  \centering
-  \caption{Righe per blocco $R_B$ di \texttt{cpu\_block} per i $k$ della traccia.}\label{tab:rb}
-  \begin{tabular}{lccccc}
-    \toprule
-    $k$ & 3 & 6 & 8 & 20 & 32 \\
-    \midrule
-    $R_B$ in \texttt{double} & 8 & 8 & 8 & 6 & 4 \\
-    $R_B$ in \texttt{float}  & 8 & 8 & 8 & 8 & 8 \\
-    \bottomrule
-  \end{tabular}
-\end{table}
-
-A $k = 32$ in \texttt{double} i 128 accumulatori occupano tutti i registri, e il
-compilatore deve tenerne qualcuno nella cache L1 (\emph{spill}). Conviene
-comunque, perché leggere $X$ la metà delle volte fa risparmiare più di quanto
-costi lo spill. La scelta del budget è stata fatta misurando sul server i valori
-32, 64 e 128 (\cref{sec:ris-padding}), e il budget si può cambiare in compilazione
-con \texttt{CFLAGS\_EXTRA=-DACC\_BUDGET=\dots} (\cref{sec:compilazione}).
-
-\paragraph{Vettorizzazione nella direzione giusta.} Dopo lo srotolamento dei
-cicli su $r$ e $c$ resta un solo ciclo, quello su $j$, e il vettorizzatore di
-GCC tende a vettorizzare quello, perché $A$ è contigua lungo $j$: carica 4
-valori consecutivi di $A$ e deve poi rimescolarli con permutazioni per
-combinarli con $X$. Le permutazioni esauriscono i registri e gli accumulatori
-finiscono in memoria: in alcuni casi le prestazioni scendevano a meno di un
-quarto. La vettorizzazione giusta è invece lungo $c$, cioè su colonne consecutive di $Y$:
-\begin{itemize}
-  \item un registro contiene 4 colonne consecutive della riga di $X$;
-  \item il valore $a$ viene replicato in tutte le posizioni di un registro
-        (\emph{broadcast});
-  \item un'unica FMA aggiorna 4 accumulatori della riga.
-\end{itemize}
-Per ottenerla, nel file di \texttt{cpu\_block} si disattiva la vettorizzazione
-dei cicli e si lascia attiva la \emph{vettorizzazione SLP} (\emph{superword-level
-parallelism}, \cref{lst:novec}), che raggruppa in un'unica istruzione
-vettoriale le operazioni scalari identiche e indipendenti prodotte dallo
-srotolamento, come $\mathit{acc}[r][0..3] \mathrel{+}= a \cdot x[0..3]$, e
-produce esattamente lo schema broadcast + FMA.
-La fusione in FMA è resa possibile dall'opzione
-\texttt{-ffp-contract=fast} (\cref{sec:compilazione}).
-
-\begin{lstlisting}[caption={Disattivazione della vettorizzazione dei cicli in \texttt{kernel\_cpu\_block.c}.}, label={lst:novec}]
-#pragma GCC optimize ("no-tree-loop-vectorize")
-\end{lstlisting}
-
-\paragraph{Risultato.} \texttt{cpu\_block} segue il tetto della memoria molto
-da vicino fino a $k = 20$: 49, 96, 129 e 299~GFLOPS, tra l'\SI{84}{\percent} e
-il \SI{92}{\percent} del tetto. A $k = 20$ va 2,6 volte più veloce di
-\texttt{cpu\_row}: è l'effetto del riuso di $X$ tra più righe e degli
-accumulatori nei registri. A $k = 32$ scende a 271~GFLOPS, sotto il valore di
-$k = 20$ e al \SI{48}{\percent} del tetto: il blocco ha solo 4 righe, i 128
-accumulatori riempiono tutti i registri e il compilatore deve tenerne qualcuno
-nella cache L1. Resta comunque più del doppio di \texttt{cpu\_row}.
+\paragraph{Risultato.} Con gli accumulatori nei registri, \texttt{cpu\_row\_reg} è
+più veloce di \texttt{cpu\_row} a ogni $k$, da 1,1 a 1,4 volte (2,1 a $k = 20$,
+dove \texttt{cpu\_row} cala). Passa da 50~GFLOPS a $k = 3$ a 133 a $k = 8$.
+Oltre cresce poco, fino a circa 150 a $k = 20$ e $k = 32$: è il secondo limite,
+che resta.
 
 \subsection{Binding dei processi e NUMA}\label{sec:binding}
 
@@ -2505,33 +2328,21 @@ Nelle misure i processi CPU sono lanciati attraverso lo script
 \texttt{mem\_locale.sh}, che con \texttt{numactl -{}-membind} vincola la
 memoria di ogni processo al proprio socket: senza il vincolo, se la memoria
 locale è occupata dalla cache dei file di altri utenti, Linux alloca
-sull'altro socket, e la banda misurata scende da 71 a \SI{52}{GB/s}.
+sull'altro socket.
 
-\paragraph{Niente hyper-threading.} Si usano solo i core fisici 0--19, uno per processo, mentre i core logici 20--39 condividono con questi unità di calcolo e cache
-(\cref{sec:cpu-hw}). A $k$ piccolo un guadagno è escluso, perché 20 processi
-saturano già la banda di memoria (\cref{sec:ris-mpi}).
-% NOTA: a k grande l'effetto dell'hyper-threading non e' stato misurato
-% (cpu_block e' a circa meta' del tetto: potrebbe guadagnare o perdere, per la
-% L1/L2 condivise e i blocchi piu' piccoli con 40 processi). Prova possibile:
-% mpirun -np 40 --use-hwthread-cpus --bind-to hwthread ...
-
-\paragraph{Rank prevedibili.} Il binding funziona come previsto anche grazie a
-\texttt{reorder = 0} nella creazione della griglia (\cref{sec:griglia}): MPI
-non rinumera i processi, quindi il rank nella griglia coincide con quello
-assegnato da \texttt{mpirun}, e il legame tra posizione nella griglia e core
-resta noto.
-
-Nella versione CUDA invece i processi si lanciano senza opzioni di binding e passano
-quasi tutto il tempo ad attendere la GPU, e la posizione sui core della CPU ha
-un effetto trascurabile sulle prestazioni.
+\paragraph{Hyper-threading e versione CUDA.} Si usano solo i 20 core fisici,
+uno per processo. Grazie a \texttt{reorder = 0} (\cref{sec:griglia}) il legame
+tra posizione nella griglia e core resta noto. La versione CUDA invece si lancia
+senza binding.
 
 \subsection{Confronto con la GPU}\label{sec:cpu-gpu}
 
 Nello stesso caso \texttt{warp\_row\_xt} in \texttt{double} va da circa 6 volte
-più veloce di \texttt{cpu\_block} a $k = 3$ (298 contro 49~GFLOPS) a 1,3 volte a
-$k = 32$ (352 contro 271). Il rapporto si riduce al crescere di $k$, perché la
-GPU in \texttt{double} è già ferma al picco di calcolo, mentre la CPU continua a
-salire con la memoria.
+più veloce di \texttt{cpu\_row\_reg} a $k = 3$ (298 contro 50~GFLOPS) a circa
+2,4 volte a $k = 20$ e $k = 32$ (352 contro 146 a $k = 32$). Il rapporto si
+riduce al crescere di $k$, perché la GPU in \texttt{double} è già ferma al picco
+di calcolo, mentre la CPU sale fino a $k = 8$ e poi si ferma intorno a
+150~GFLOPS.
 
 % =====================================================================
 \section{Metodologia di misura}\label{sec:misure}
@@ -2598,7 +2409,7 @@ e separatamente per ogni fase, si prende quindi il \emph{massimo tra i
 processi}. Le statistiche si calcolano dopo, sulla serie di questi massimi, e
 la loro media è il tempo medio per invocazione richiesto dalla traccia.
 
-L'ordine conta: facendo prima la media di ogni processo e poi il massimo tra le
+Facendo prima la media di ogni processo e poi il massimo tra le
 medie, si sottostimerebbe il tempo quando il processo più lento cambia da
 un'invocazione all'altra. Per esempio, con due processi e due invocazioni.
 
@@ -2641,7 +2452,7 @@ si calcolano:
   \item la \emph{mediana}, meno sensibile della media a singole invocazioni
         anomale;
   \item il \emph{minimo}, il miglior tempo ottenuto;
-  \item la \emph{deviazione standard}, campionaria, cioè con divisore $R - 1$;
+  \item la \emph{deviazione standard}, misura della dispersione dei tempi;
   \item il \emph{coefficiente di variazione} (CV), rapporto percentuale tra
         deviazione standard e media: misura quanto le invocazioni sono stabili
         ed è confrontabile tra configurazioni con tempi molto diversi.
@@ -2659,7 +2470,7 @@ riporta entrambi:
   \item \emph{con gli eventi CUDA}: il tempo trascorso sulla GPU tra l'inizio e
         la fine del kernel (\cref{sec:h2d}, CSV: \texttt{t\_compute\_dev}).
 \end{itemize}
-Queste misure differiscono a seconda del caso di utilizzo della GPU.
+Queste misure differiscono a seconda del caso di utilizzo della GPU ed è importante ragionare sulle implicazioni di ciascuna.
 
 \paragraph{GPU in uso esclusivo.} Con un solo processo le due misure
 differiscono solo per il costo del lancio e della sincronizzazione, pochi
@@ -2758,9 +2569,7 @@ un nodo separato: il tempo del nucleo misura quindi il tempo che lo stesso
 algoritmo impiegherebbe su $P$ nodi indipendenti, senza contesa. Serve perché sul
 server c'è una sola GPU, che i processi si dividono (\cref{sec:gpu-assign}): la
 modalità \texttt{-S} mostra come scalerebbe la stessa soluzione con una GPU per
-processo, e quanto conta la forma della griglia senza l'effetto della contesa.
-Lo stesso vale per la CPU,
-dove i processi si dividono la banda di memoria.
+processo.
 
 Nel codice (\cref{lst:turni}), in modalità concorrente tutti i processi
 eseguono insieme il prodotto locale. In modalità \texttt{-S} calcolano invece a
@@ -2784,11 +2593,11 @@ if (!h->serial) {
 }
 \end{lstlisting}
 
-La stima rimane comunque otttimistica broadcast e riduzione passano
+La stima rimane comunque ottimistica: broadcast e riduzione passano
 comunque per la memoria condivisa del server, molto più veloce di una rete tra
 nodi veri.
 
-\subsection{Precisione e indici di prestazione}\label{sec:modelli}
+\subsection{Precisione ed errore atteso}\label{sec:modelli}
 
 \paragraph{Confronto tra \texttt{float} e \texttt{double}.} Il \texttt{float} è più veloce,
 ma meno preciso: conserva circa 7 cifre significative, contro le circa 16 del
@@ -2808,38 +2617,20 @@ Quale delle due precisioni usare è a discrezione dell'utente:
 il programma offre entrambe le versioni. Le velocità misurate sono confrontate
 in \cref{sec:gpu-riepilogo}, gli errori in \cref{sec:verifica}.
 
-\paragraph{Speedup ed efficienza.} Per capire quanto conviene aggiungere
-processi si confronta il tempo con $P$ processi con quello con un solo
-processo:
-\[
-  S(P) = \frac{T(1)}{T(P)}, \qquad E(P) = \frac{S(P)}{P} .
-\]
-$T(1)$ è il tempo del nucleo con un solo processo e $T(P)$ quello con $P$
-processi. Lo \emph{speedup} $S(P)$ dice quante volte si va più veloci.
-L'\emph{efficienza} $E(P)$ dice quanto bene si sfruttano i
-processi: è lo speedup diviso per il numero di processi.
-
-Se la versione a un processo è scritta o configurata male, è lenta,
-e qualunque versione parallela sembra ottima al confronto, si
-può persino ottenere uno speedup superiore a $P$, che sembra impossibile. Per
-evitarlo, il riferimento a un processo usa lo stesso kernel, configurato al
-meglio: ad esempio, per il budget dei registri di \texttt{cpu\_block} si è
-scelto 128 invece di 64 questo perchè, nonostante con 20 processi i due valori si equivalgano
-con un solo processo 128 è nettamente più veloce (\cref{sec:ris-padding}).
-Uno speedup superlineare (>$P$) può comunque avere cause reali come il caso in cui con
-più processi ogni blocco è più piccolo e può stare meglio in
-cache.Ad ogni modo il caso osservato è riportato in \cref{sec:ris-mpi}.
-
 % =====================================================================
 \section{Verifica della correttezza}\label{sec:verifica}
 
 \subsection{Riferimento seriale e verifica distribuita}\label{sec:verifica-distr}
 
 Il riferimento è la funzione \texttt{serial\_mxm} (\texttt{serial.c}): tre
-cicli annidati, con gli accumulatori sempre in \texttt{double}
-(\cref{sec:collaudo}).
+cicli annidati, senza ottimizzazioni se non l'ordine dei cicli. Per ogni riga
+di $A$, ciascun elemento viene letto una sola volta e moltiplicato per l'intera
+riga corrispondente di $X$. Gli accumulatori sono sempre in \texttt{double},
+anche nella versione in singola: il riferimento deve essere più accurato del
+codice che giudica, così l'errore misurato è quello del risultato e non la
+somma degli errori di due calcoli approssimati.
 
-Come anticipato in \cref{sec:collaudo}, la verifica è \emph{distribuita}: non
+La verifica è \emph{distribuita}: non
 raccoglie mai $A$ o $Y$ su un solo processo, perché per le matrici più grandi
 non entrerebbero nella memoria di un processo solo. La esegue
 \texttt{verify} in \texttt{main.c}: ogni processo della colonna~0, che alla
@@ -2881,7 +2672,7 @@ numero:
 \[
   \text{errore} = \frac{\lVert Y - Y_{\text{ref}} \rVert_F}{\lVert Y_{\text{ref}} \rVert_F} .
 \]
-La \emph{norma di Frobenius} di una matrice è la radice quadrata della somma dei
+Ovvero, la radice quadrata della somma dei
 quadrati di tutti i suoi elementi.
 
 \paragraph{Tolleranza ed Errori:} Si è deciso di accettare il risultato se
@@ -3026,37 +2817,27 @@ uno script proprio.
       tutti i $k$. & 60 \\
     \hline
     C & \texttt{banda.sh}, \texttt{picco\_gpu.cu} &
-      \textbf{Quali sono i tetti della roofline?} Banda di lettura di GPU e CPU e
+      \textbf{Quali sono i tetti della roofline?} Banda di lettura della GPU e
       picco di calcolo della GPU in \texttt{double} e \texttt{float}
       (\cref{sec:banda}). & 4 \\
     \hline
-    D & \texttt{D\_mpi\_cpu.conf} &
-      \textbf{Come scala la versione CPU?} $16384 \times 16384$,
-      \texttt{cpu\_block}, $k = 3$ e $32$, 11 griglie da 1 a 20 processi
-      (comprese $20 \times 1$ e $1 \times 20$), in modalità concorrente e a
-      nodi emulati. & 42 \\
+    D & \texttt{D\_mpi\_gpu.conf} &
+      \textbf{Più processi aiutano la versione MPI + CUDA con una sola GPU, e
+      come scalerebbe con una GPU per processo?} $16384 \times 16384$, kernel migliore,
+      $k = 8$, griglie $1 \times 1$, $2 \times 1$ e $2 \times 2$, in modalità
+      concorrente e a nodi emulati. & 5 \\
     \hline
-    E & \texttt{E\_mpi\_gpu.conf} &
-      \textbf{Come scalerebbe la versione MPI + CUDA con nodi emulati, e quanto
-      conta la forma della griglia?} $16384 \times 16384$, kernel migliore,
-      $k = 8$, griglie da 1 a 4 processi, in modalità concorrente e a nodi
-      emulati. & 11 \\
-    \hline
-    F & \texttt{F\_padding.conf} &
+    E & \texttt{E\_padding.conf} &
       \textbf{Quanto aiuta allineare le righe?} Dimensioni 8191 e 16383, scelte
       perché senza padding le righe partano disallineate, con e senza padding,
-      su GPU e CPU. & 24 \\
-    \hline
-    --- & \texttt{budget\_cpu.sh} &
-      Verifica mirata: budget dei registri 32, 64 e 128 di \texttt{cpu\_block},
-      con 1 e con 20 processi (\cref{sec:vettorizzazione}). & 30 \\
+      sulla GPU. & 12 \\
     \hline
     --- & \texttt{frequenza.sh} &
       Verifica mirata: la stessa configurazione con riscaldamento breve e lungo,
       per l'effetto della frequenza variabile (\cref{sec:riscaldamento}). & 18 \\
     \hline
     --- & \texttt{migliore.conf} &
-      Kernel GPU migliore, aggiornato dopo il gruppo B e letto da A, E e F. & --- \\
+      Kernel GPU migliore, aggiornato dopo il gruppo B e letto da A, D ed E. & --- \\
     \hline
   \end{tabularx}
 \end{table}
@@ -3095,16 +2876,11 @@ REPS=30
 \paragraph{Cosa fa lo script.} Dato il file di configurazione,
 \texttt{campagna.sh}:
 \begin{enumerate}
-  \item elenca tutte le combinazioni da eseguire. Con \texttt{ELENCO=1} si
-        ferma qui: stampa l'elenco senza compilare né eseguire nulla, e serve a
-        controllare una configurazione prima di lanciarla;
+  \item elenca tutte le combinazioni da eseguire;
   \item compila solo gli eseguibili necessari, cioè le combinazioni di backend
         e precisione presenti nella configurazione;
-  \item esegue le misure una alla volta. Se una fallisce, annota nel log l'errore e passa alla successiva, senza
-        interrompere la campagna;
-  \item salva i risultati in un unico CSV in \texttt{results/}, con il nome
-        della campagna e la data, insieme a una copia della configurazione e al
-        log degli errori.
+  \item esegue le misure una alla volta;
+  \item salva i risultati in un unico CSV in \texttt{results/};
 \end{enumerate}
 
 \paragraph{Il kernel GPU migliore} usato dai gruppi
@@ -3119,14 +2895,8 @@ Le campagne più lunghe si lanciano con
 
 \subsection{Scelta delle dimensioni}\label{sec:dimensioni}
 
-I gruppi B, D ed E usano tutti
-la matrice quadrata $16384 \times 16384$, perché è molto più grande delle cache:
-occupa \SI{2}{GiB}, contro i \SI{4}{MiB} della cache L2 della GPU e i
-\SI{13.75}{MiB} della L3 di ogni processore. Ogni invocazione è quindi costretta a leggere $A$
-davvero dalla memoria, così si misura il comportamento reale del nucleo, senza la facilitazione di una matrice che sta in cache.
-
-Il gruppo A fa crescere la dimensione di base $S$ raddoppiandola (2048, 4096,
-8192 e 16384). Si coprono così quasi due ordini di grandezza nel numero di
+Le dimensioni del gruppo A sono definite da una \emph{dimensione di base} $S$,
+che raddoppia da 2048 a 16384 (2048, 4096, 8192 e 16384). Si coprono così quasi due ordini di grandezza nel numero di
 elementi di $A$ (da circa 4 a 268 milioni nella forma quadrata): in questo modo
 si osserva come cambiano le prestazioni passando da matrici piccole, con poco
 lavoro per la GPU, a matrici grandi. Le tre forme si ottengono da $S$:
@@ -3144,7 +2914,7 @@ questo può invece sfalzare le run per le dimensioni piccole,
 con invocazioni di pochi millisecondi, per far fronte a questo si misurano 30
 invocazioni per configurazione invece di 10.
 
-Il gruppo F usa invece 8191
+Il gruppo E usa invece 8191
 e 16383, cioè $2^p - 1$: con queste dimensioni, senza padding, le righe
 cominciano a tutti i possibili disallineamenti, mentre con 8192 o 16384
 sarebbero già allineate per conto loro e il padding non avrebbe effetto
@@ -3159,12 +2929,11 @@ Durante lo studio si è constatato, in sintesi:
         \texttt{double} raggiunge il \SI{98}{\percent} del tetto della memoria a
         $k = 3$ e il \SIrange{94}{95}{\percent} del picco di calcolo per $k \ge 6$. In \texttt{float} segue il tetto della memoria fino a $k = 8$, mentre a $k = 20$ e $k = 32$ cuBLAS è 1,6 e 2,3 volte più
         veloce;
-  \item sulla CPU, come prevedibile, \texttt{cpu\_block}, con 20 processi, arriva tra
-        l'\SI{84}{\percent} e il \SI{92}{\percent} del tetto della memoria fino
-        a $k = 20$.
+  \item sulla CPU il kernel migliore è \texttt{cpu\_row\_reg}, con 20 processi,
+        da 1,1 a 1,4 volte più veloce di \texttt{cpu\_row} (2,1 a $k = 20$).
 \end{itemize}
 In questo capitolo vengono presentate le prestazioni della soluzione finale, la scalabilità
-con MPI, l'effetto del padding e del budget dei registri, e gli effetti sulla
+con MPI, l'effetto del padding e gli effetti sulla
 misura.
 
 \subsection{La soluzione finale}\label{sec:ris-finale}
@@ -3218,7 +2987,7 @@ Le prestazioni crescono con la dimensione e poi si stabilizzano:
 
 Le matrici piccole vanno più lente per due motivi:
 \begin{itemize}
-  \item con 2048 righe ci sono solo 2048 warp, cioè 256 blocchi, contro i 192
+  \item con 2048 righe ci sono 2048 warp, cioè 256 blocchi, contro i 192
         che la GPU può ospitare contemporaneamente ($48$ SM $\times$ 4; 96 a
         $k = 32$, dove entrano 2 blocchi per SM), quindi
         i blocchi vengono eseguiti in due ``turni'' e nel secondo la GPU è
@@ -3290,187 +3059,55 @@ il lavoro in più tiene la GPU più occupata.
 
 \subsection{Scalabilità con MPI}\label{sec:ris-mpi}
 
-La scalabilità con MPI è misurata su entrambe le versioni: prima quella solo
-CPU, in cui ogni processo calcola su un proprio core (campagna~D), poi quella
-MPI + CUDA, in cui i processi condividono l'unica GPU del server (campagna~E).
-
-\subsubsection{Versione CPU (solo MPI)}
-
-\paragraph{La velocità cresce con i processi.} La campagna~D misura
-\texttt{cpu\_block} sulla matrice $16384 \times 16384$, da 1 a 20 processi, per
-$k = 3$ e $k = 32$ (\cref{fig:speedup-cpu}). Con 20 processi su griglia
-$4 \times 5$ lo speedup rispetto a un processo è:
-\begin{itemize}
-  \item a $k = 3$, 10,9 in modalità concorrente, cioè un'efficienza del
-        \SI{55}{\percent}, e 21,1 a nodi emulati, il \SI{106}{\percent};
-  \item a $k = 32$, 17,8 in modalità concorrente, l'\SI{89}{\percent}, e 17,7 a
-        nodi emulati, praticamente uguale.
-\end{itemize}
-
-\begin{figure}[H]
-  \centering
-\begin{tikzpicture}
-\begin{groupplot}[
-  group style={group size=2 by 1, horizontal sep=1.5cm},
-  width=0.5\textwidth, height=0.45\textwidth,
-  xmin=0, xmax=21, ymin=0, ymax=23,
-  xtick={1,2,4,8,10,16,20}, ytick={0,5,10,15,20},
-  xticklabel style={font=\scriptsize}, yticklabel style={font=\scriptsize},
-  xlabel={processi $P$}, ylabel={speedup $S(P)$},
-  xlabel style={font=\footnotesize}, ylabel style={font=\footnotesize},
-  title style={font=\footnotesize},
-  grid=major, grid style={gray!20},
-  every axis plot/.append style={thick, mark size=1.7pt},
-]
-\nextgroupplot[title={$k = 3$}, legend style={font=\scriptsize, at={(0.02,0.98)}, anchor=north west, cells={anchor=west}}]
-\addplot[gray!60, dashed, domain=0:21, samples=2] {x};
-\addlegendentry{lineare, $S(P) = P$}
-\addplot[blue!70!black, mark=*] coordinates {(1,1.00) (2,1.98) (4,3.29) (8,4.85) (10,5.32) (16,8.49) (20,10.91)};
-\addlegendentry{concorrente}
-\addplot[orange!85!black, mark=square*] coordinates {(1,1.00) (2,1.93) (4,3.39) (8,6.57) (10,8.37) (16,14.29) (20,21.13)};
-\addlegendentry{nodi emulati (\texttt{-S})}
-\nextgroupplot[title={$k = 32$}]
-\addplot[gray!60, dashed, domain=0:21, samples=2] {x};
-\addplot[blue!70!black, mark=*] coordinates {(1,1.00) (2,1.89) (4,3.54) (8,5.35) (10,5.31) (16,13.34) (20,17.83)};
-\addplot[orange!85!black, mark=square*] coordinates {(1,1.00) (2,1.88) (4,3.50) (8,6.92) (10,8.38) (16,13.43) (20,17.65)};
-\end{groupplot}
-\end{tikzpicture}
-  \caption{Speedup della versione CPU (\texttt{cpu\_block},
-    $16384 \times 16384$) al variare del numero di processi, in modalità
-    concorrente e a nodi emulati, per $k = 3$ e $k = 32$. Griglie usate:
-    $2 \times 1$, $2 \times 2$, $4 \times 2$, $5 \times 2$, $4 \times 4$,
-    $4 \times 5$. La linea tratteggiata è lo speedup lineare.}\label{fig:speedup-cpu}
-\end{figure}
-
-Memoria condivisa: conta a $k = 3$, non a $k = 32$. A $k = 3$, con
-20 processi, la versione concorrente fa 49~GFLOPS, il \SI{92}{\percent} del tetto
-della memoria della CPU (53): i processi non possono andare più veloci perché si
-dividono la stessa banda. Non è un problema di MPI, ma della macchina: lo
-conferma la modalità a nodi emulati, dove ogni processo ha la memoria tutta per
-sé e lo speedup è lineare, anzi leggermente superiore (\SI{106}{\percent}). A
-$k = 32$, invece, con 20 processi si arriva a 269~GFLOPS, meno della metà del
-tetto della memoria (568): la banda non è un collo di bottiglia, e infatti la
-modalità concorrente e quella a nodi emulati danno lo stesso risultato.
-
-\paragraph{La forma della griglia conta molto a $k$ grande.} A $k = 32$, con 20
-processi:
-\begin{itemize}
-  \item con la griglia $4 \times 5$ un'invocazione dura \SI{64}{ms}, con
-        speedup 17,8;
-  \item con la griglia $20 \times 1$ dura \SI{216}{ms}, con speedup solo 5,3.
-        Ogni processo ha bisogno di tutta $X$, che a $k = 32$ occupa
-        \SI{4}{MiB}: molto più della cache L2 di un core (\SI{1}{MiB}), e 10
-        processi per socket insieme superano anche la L3. $X$ deve quindi essere
-        riletta continuamente dalla memoria, in concorrenza con $A$. A nodi
-        emulati, dove il processo ha la L3 tutta per sé, la stessa griglia scende
-        a \SI{74}{ms}. Con la griglia $4 \times 5$, invece, ogni processo usa
-        solo un quinto di $X$, circa \SI{0.8}{MiB}, che sta nella L2. Lo stesso
-        effetto si vede con 8 e 10 processi (griglie $4 \times 2$ e
-        $5 \times 2$): con 2 sole colonne ogni processo usa metà di $X$,
-        \SI{2}{MiB}, e in modalità concorrente lo speedup si ferma intorno
-        a 5;
-  \item con la griglia $1 \times 20$ dura \SI{74}{ms}, con speedup 15,4: qui il
-        costo principale è la riduzione di $Y$, circa \SI{14}{ms}, perché con
-        20 processi su una riga ognuno contribuisce a tutta $Y$, \SI{4}{MiB}.
-\end{itemize}
-% NOTA: possibile aggiunta di esperimenti per giustificare il ragionamento sulla
-% griglia 20x1 e sulle griglie a 2 colonne (X fuori dalla cache L2/L3): ad es.
-% contatori di cache (perf stat -e cache-misses) o una prova con X piu' piccola.
-
-\subsubsection{Versione GPU (MPI + CUDA)}
-
-Si passa ora alla
-versione con backend GPU, la soluzione finale. La campagna~E misura \texttt{warp\_row\_xt} in \texttt{double} sulla matrice
+La scalabilità con MPI è misurata sulla versione MPI + CUDA, la soluzione
+finale, in cui i processi condividono l'unica GPU del server. La campagna~D misura \texttt{warp\_row\_xt} in \texttt{double} sulla matrice
 $16384 \times 16384$, con $k = 8$, da 1 a 4 processi
 (\cref{tab:ris-mpi-gpu}). Con un processo il nucleo fa 349~GFLOPS, mentre in modalità
-concorrente aggiungere processi non migliora nulla, e nella maggior parte
-delle griglie peggiora leggermente. È il comportamento atteso: c'è una sola GPU, e i processi la usano
+concorrente aggiungere processi non migliora nulla, anzi peggiora
+leggermente. È il comportamento atteso: c'è una sola GPU, e i processi la usano
 a turno (\cref{sec:eventi-orologio}), quindi il lavoro totale è lo stesso, ma si
-aggiungono le comunicazioni e i cambi di turno. Lo speedup resta intorno a 1 (0,84--1,02).
+aggiungono le comunicazioni e i cambi di turno. Lo speedup resta intorno a 1 (0,85--0,94).
 
 \begin{table}[H]
   \centering
-  \caption{GFLOPS del nucleo con più processi sulla GPU (campagna~E,
+  \caption{GFLOPS del nucleo con più processi sulla GPU (campagna~D,
     \texttt{warp\_row\_xt}, \texttt{double}, $16384 \times 16384$, $k = 8$).}\label{tab:ris-mpi-gpu}
-  \begin{tabular}{lrrrrrr}
+  \begin{tabular}{lrrr}
     \toprule
-    Griglia & $1 \times 1$ & $2 \times 1$ & $1 \times 2$ & $2 \times 2$ & $4 \times 1$ & $1 \times 4$ \\
+    Griglia & $1 \times 1$ & $2 \times 1$ & $2 \times 2$ \\
     \midrule
-    concorrente  & 349 & 327 & 303 & 297  & 356  & 292  \\
-    nodi emulati & --- & 664 & 650 & 1253 & 1186 & 1040 \\
+    concorrente  & 349 & 327 & 297  \\
+    nodi emulati & --- & 664 & 1253 \\
     \bottomrule
   \end{tabular}
 \end{table}
 
-\paragraph{A nodi emulati la soluzione scala.} Se ogni processo avesse una GPU
+\paragraph{A nodi emulati la soluzione scala.} Per misurarlo si usano lo
+\emph{speedup} $S(P) = T(1)/T(P)$, cioè quante volte si va più veloci con $P$
+processi rispetto a uno, e l'\emph{efficienza} $E(P) = S(P)/P$, cioè quanto bene
+si sfruttano i processi. Se ogni processo avesse una GPU
 per sé, la stessa soluzione andrebbe quasi in proporzione al numero di
 processi: speedup 1,9 con 2 processi (\SI{95}{\percent}) e 3,6 con 4 sulla
 griglia $2 \times 2$ (\SI{90}{\percent}), fino a 1253~GFLOPS. È la stima di
 come andrebbe su una macchina con più GPU (\cref{sec:gpu-assign}).
 
-\paragraph{La forma della griglia, misurata.} A nodi emulati le comunicazioni
-non subiscono la contesa per la GPU, e si possono quindi confrontare con il
-volume previsto in \cref{tab:volume} (la tabella dei dati scambiati da ogni
-griglia con 4 processi, \cref{sec:costo-comm}). Il confronto è riportato in
-\cref{tab:comm-misurate}.
-
-\begin{table}[H]
-  \centering
-  \caption{Costo di broadcast e riduzione con 4 processi a nodi emulati
-    (campagna~E, matrice quadrata, $k = 8$), confrontato con il volume previsto
-    in \cref{tab:volume}.}\label{tab:comm-misurate}
-  \begin{tabular}{lccc}
-    \toprule
-    Griglia & Volume previsto & Tempo misurato & \% del tempo del nucleo \\
-    \midrule
-    $2 \times 2$ & $2\, N k$                    & \SI{0.24}{ms} & \SI{7}{\percent}  \\
-    $4 \times 1$ & $3\, N k$ (solo broadcast)  & \SI{0.43}{ms} & \SI{12}{\percent} \\
-    $1 \times 4$ & $3\, N k$ (solo riduzione)  & \SI{0.94}{ms} & \SI{23}{\percent} \\
-    \bottomrule
-  \end{tabular}
-\end{table}
-
-L'ordine è quello previsto dal volume: la $2 \times 2$ muove meno dati ed è la
-più veloce. C'è però una differenza che il solo volume non prevede: la
-$4 \times 1$ e la $1 \times 4$ muovono lo stesso volume (\SI{1}{MiB} per
-messaggio), ma la riduzione (\SI{0.94}{ms}) costa più del doppio del broadcast
-(\SI{0.39}{ms}; gli \SI{0.43}{ms} della tabella comprendono anche la
-riduzione), perché oltre a trasferire i dati deve sommarli.
-
-\paragraph{In conclusione: CPU e GPU a confronto.} Le due versioni scalano con
-MPI per motivi diversi. Sulla CPU i processi calcolano davvero in parallelo, uno
-per core: a $k = 32$ con 20 processi lo speedup è 17,8, e a $k = 3$ il limite è
-la banda di memoria condivisa, non MPI. Sulla GPU, con un'unica scheda, più
-processi non aiutano, mentre a nodi emulati, cioè con una GPU per processo, la
-soluzione scalerebbe invece quasi linearmente (speedup 3,6 con 4 processi), con
-una stima ottimistica (\cref{sec:modalita}). A nodi emulati il peso delle
-comunicazioni è però molto diverso: sulla CPU restano intorno al \SI{3}{\percent} del tempo del
-nucleo (griglia $4 \times 4$, $k = 32$), sulla GPU vanno dal \SI{7}{\percent}
-al \SI{23}{\percent} a seconda della griglia (\cref{tab:comm-misurate}). La
-differenza viene dal calcolo, che
-sulla GPU è molto più rapido e lascia quindi alle comunicazioni una quota
-maggiore del tempo.
-
-\subsection{Padding e budget dei registri}\label{sec:ris-padding}
-La campagna~F confronta
+\subsection{Padding}\label{sec:ris-padding}
+La campagna~E confronta
 \texttt{-p 1}, con tutte le righe allineate, e \texttt{-p 0}, che disattiva
 padding e allocazione allineata, sulle dimensioni 8191 e 16383
-(\cref{sec:dimensioni}), in \texttt{double} con $k = 3$, 8 e 32: sulla GPU con il
-kernel migliore e un processo, sulla CPU con \texttt{cpu\_block} e 20 processi
-($4 \times 5$). Qui una riga occupa $8N$ byte, non multiplo né di 64 né
-di 128, quindi senza padding quasi nessuna riga parte allineata (sulla GPU solo
+(\cref{sec:dimensioni}), in \texttt{double} con $k = 3$, 8 e 32, con il kernel
+GPU migliore e un processo. Qui una riga occupa $8N$ byte, non multiplo di 128,
+quindi senza padding quasi nessuna riga parte allineata (sulla GPU solo
 la prima, perché \texttt{cudaMalloc} allinea a \SI{256}{byte}). Le differenze
-sono minime: sulla GPU da \SI{-0.1}{\percent} a \SI[retain-explicit-plus]{+1.1}{\percent}, sulla CPU da
-\SI{-3.4}{\percent} a \SI[retain-explicit-plus]{+1.6}{\percent}, cioè dentro la variabilità delle misure (in un caso il coefficiente
-di variazione arriva all'\SI{11.8}{\percent}).
+sono minime, da \SI{-0.1}{\percent} a \SI[retain-explicit-plus]{+1.1}{\percent}, cioè dentro la variabilità delle
+misure (il coefficiente di variazione arriva all'\SI{1.2}{\percent}).
 
  Il motivo più probabile per cui
 l'effetto non si vede è che le righe di $A$ sono consecutive in memoria: il
 settore ``in più'' letto all'inizio di una riga disallineata contiene la fine
 della riga precedente, che è già stata letta o lo sarà a breve. La cache L2 lo
 serve quindi senza leggerlo di nuovo dalla memoria, e il traffico verso la
-memoria globale resta quasi lo stesso. Per la CPU vale lo stesso discorso, con
-le linee di cache da \SI{64}{byte}.
+memoria globale resta quasi lo stesso.
 % NOTA: la spiegazione (settore in piu' servito dalla L2 perche' appartiene alla
 % riga vicina) e' un'ipotesi coerente con i dati, non misurata: possibile verifica
 % con il profiler (byte letti dalla DRAM con e senza padding).
@@ -3478,42 +3115,6 @@ le linee di cache da \SI{64}{byte}.
 Il padding resta comunque attivo per default: non costa nulla di misurabile e
 garantisce l'allineamento anche in condizioni diverse da quelle provate, ad
 esempio con blocchi non consecutivi in memoria.
-
-\paragraph{La scelta del budget dei registri.} Lo script
-\texttt{budget\_cpu.sh} confronta i budget 32, 64 e 128 di \texttt{cpu\_block}
-(\cref{sec:vettorizzazione}) sulla matrice $16384 \times 16384$
-(\cref{tab:budget}).
-
-\begin{table}[H]
-  \centering
-  \caption{GFLOPS di \texttt{cpu\_block} al variare del budget dei registri
-    (\texttt{double}, $16384 \times 16384$).}\label{tab:budget}
-  \begin{tabular}{lrrrr}
-    \toprule
-     & \multicolumn{2}{c}{1 processo} & \multicolumn{2}{c}{20 processi ($4 \times 5$)} \\
-    \cmidrule(lr){2-3}\cmidrule(lr){4-5}
-    Budget & $k=20$ & $k=32$ & $k=20$ & $k=32$ \\
-    \midrule
-    32 ($R_B = 1$) & 5,0           & 5,0           & 147          & 148          \\
-    64             & 13,0          & 10,2          & \textbf{298} & 251          \\
-    \textbf{128}   & \textbf{17,8} & \textbf{15,2} & 294          & \textbf{265} \\
-    \bottomrule
-  \end{tabular}
-\end{table}
-
-\begin{itemize}
-  \item Passare da 32 a 64 raddoppia le prestazioni con 20 processi, e le
-        moltiplica per 2--3 con un processo solo. A $k \le 8$ i tre budget
-        danno invece risultati quasi uguali, perché $R_B$ è comunque alto.
-  \item Tra 64 e 128, con 20 processi, la differenza è piccola: appena ogni
-        valore di $X$ serve almeno due righe, il limite diventa la banda di
-        memoria condivisa, e altre righe non aiutano.
-  \item Con un solo processo 128 è nettamente migliore: \SI[retain-explicit-plus]{+37}{\percent} a $k = 20$ e
-        \SI[retain-explicit-plus]{+49}{\percent} a $k = 32$. Un core da solo ha banda in abbondanza, e più riuso
-        di $X$ significa più velocità. È questo che ha deciso la scelta: il
-        riferimento a un processo, usato per lo speedup, deve sfruttare il
-        kernel al meglio (\cref{sec:modelli}).
-\end{itemize}
 
 \subsection{Effetti sulla misura}\label{sec:ris-effetti}
 \begin{itemize}
@@ -3525,15 +3126,6 @@ esempio con blocchi non consecutivi in memoria.
         differenza dovuto solo alla frequenza, che sale dopo un periodo di
         lavoro continuo. Da qui il riscaldamento a tempo
         (introdotto in \cref{sec:riscaldamento}).
-  \item \textbf{Eventi CUDA e orologio.} Con un processo, o a nodi emulati, le
-        due misure coincidono (\SI{12.17}{ms} e \SI{12.16}{ms} con un processo,
-        \SI{3.19}{ms} e \SI{3.18}{ms} sulla griglia $2 \times 2$ a nodi
-        emulati). In concorrenza, sulla $2 \times 2$, si separano: il lavoro
-        vero dura \SI{3.2}{ms}, gli eventi misurano \SI{10.2}{ms} perché
-        includono i turni ceduti agli altri processi, e l'orologio
-        \SI{14.1}{ms} perché aggiunge circa \SI{3.9}{ms} di attesa prima del
-        kernel. Con gli eventi il nucleo sembrerebbe più veloce di quanto sia:
-        per questo si usa l'orologio (\cref{sec:eventi-orologio}).
   \item \textbf{I trasferimenti esclusi dal tempo.} Le copie di $X$ verso la
         GPU e di $Y$ verso la CPU, escluse dal tempo del nucleo come chiede la
         traccia, pesano circa il \SI{5}{\percent} del
@@ -3550,22 +3142,18 @@ esempio con blocchi non consecutivi in memoria.
 % =====================================================================
 \section{Conclusioni}\label{sec:conclusioni}
 
-\paragraph{Sintesi dei risultati.} Il progetto realizza il prodotto
-$Y \leftarrow A\,X$ tra una matrice densa e un multivettore, con MPI su una
-griglia bidimensionale di processi e due versioni per il calcolo locale: CUDA
-sulla GPU e solo MPI sulla CPU.
+\paragraph{Sintesi dei risultati.}
 \begin{itemize}
   \item Sulla GPU il kernel finale \texttt{warp\_row\_xt} lavora praticamente al
         limite dell'hardware: in \texttt{double} arriva al \SI{98}{\percent} del
         tetto della memoria a $k = 3$ e al \SIrange{94}{95}{\percent} del picco
         di calcolo per $k \ge 6$, mentre in \texttt{float} segue il tetto della memoria fino a $k = 8$. Alla dimensione $S = 16384$ fa tra 294 e
         354~GFLOPS in \texttt{double}, nelle tre forme richieste dalla traccia.
-  \item Sulla CPU, con 20 processi, \texttt{cpu\_block} arriva a circa il
-        \SI{90}{\percent} del tetto della memoria fino a $k = 20$.
-  \item La GPU è da 6 volte più veloce della CPU a $k = 3$ a 1,3 volte a
+  \item Sulla CPU, con 20 processi, \texttt{cpu\_row\_reg} è da 1,1 a 1,4 volte
+        più veloce di \texttt{cpu\_row} (2,1 a $k = 20$).
+  \item La GPU è da 6 volte più veloce della CPU a $k = 3$ a 2,4 volte a
         $k = 32$.
-  \item Con MPI, sulla CPU la soluzione scala bene quando la memoria non è il
-        limite (speedup 17,8 su 20 processi a $k = 32$). A nodi emulati la
+  \item Con MPI, a nodi emulati la
         versione GPU scalerebbe quasi linearmente (speedup 3,6 su 4 processi),
         mentre sul server reale, con una sola GPU, più processi non portano
         vantaggi.
@@ -3577,8 +3165,7 @@ sulla GPU e solo MPI sulla CPU.
         miglioramento dei kernel GPU, da \texttt{thread\_row} a
         \texttt{warp\_row\_xt}, non ha aggiunto calcoli, ma ha cambiato il modo
         di leggere $A$ e $X$: una volta sola invece di $k$ volte, in modo
-        coalescente invece che sparso. Lo stesso vale sulla CPU, dove il
-        guadagno di \texttt{cpu\_block} viene dal riuso di $X$ tra più righe.
+        coalescente invece che sparso.
   \item Non tutte le ottimizzazioni rendono. La memoria shared di
         \texttt{warp\_row\_smem} e il padding delle righe non hanno portato
         vantaggi misurabili, probabilmente perché le cache della GPU svolgevano già quel
@@ -3586,13 +3173,12 @@ sulla GPU e solo MPI sulla CPU.
   \item Le misure vanno controllate quanto il codice. Il riscaldamento a tempo e
         la scelta dell'orologio al posto degli eventi CUDA: entrambe le scelte
         sono nate da un risultato che non tornava. Lo stesso vale per il picco di calcolo, che
-        con la frequenza dichiarata dalla scheda tecnica risultava più basso
-        delle prestazioni misurate.
+        calcolato dai valori dichiarati risultava più basso delle prestazioni
+        misurate.
   \item Il miglior risultato dipende dall'hardware a disposizione. Su un server
-        con una sola GPU la versione CUDA non scala con i processi, mentre
-        quella solo MPI usa tutti i 20 core, e la modalità a nodi emulati ha
-        permesso di valutare entrambe anche nello scenario che il server non
-        offre.
+        con una sola GPU la versione CUDA non scala con i processi, e la
+        modalità a nodi emulati ha permesso di valutarla anche nello scenario
+        che il server non offre.
 \end{itemize}
 
 \paragraph{Sviluppi futuri.}
@@ -3601,7 +3187,7 @@ sulla GPU e solo MPI sulla CPU.
         \texttt{warp\_row\_xt} è probabilmente limitato dalle letture di $X$
         dalla cache, e cuBLAS lo supera (\cref{sec:gpu-riepilogo}). Se ogni warp
         calcolasse $R$ righe insieme, ogni valore di $X$ letto servirebbe $R$
-        righe, come in \texttt{cpu\_block}. In cambio i warp scendono a $M/R$ e
+        righe. In cambio i warp scendono a $M/R$ e
         ogni thread tiene $R \times k$ accumulatori, quindi sullo SM entrano
         meno warp: conviene solo con $k$ grande. Non è stato implementato perché
         la soluzione finale usa il \texttt{double}, dove \texttt{warp\_row\_xt}
@@ -3614,8 +3200,7 @@ sulla GPU e solo MPI sulla CPU.
   \item \emph{Più processi sulla stessa GPU con MPS.} Il servizio MPS di NVIDIA
         permetterebbe ai kernel di processi diversi di essere eseguiti insieme
         invece che a turno (\cref{sec:eventi-orologio}).
-  \item \emph{Verifiche più dirette.} Alcune spiegazioni, come l'effetto della
-        cache con la griglia $20 \times 1$, l'effetto ridotto del padding e il
+  \item \emph{Verifiche più dirette.} Alcune spiegazioni, come l'effetto ridotto del padding e il
         limite di \texttt{warp\_row\_xt} in \texttt{float} a $k$ grande, sono
         ipotesi coerenti con
         i dati ma non misurate: si potrebbero confermare con i contatori
@@ -3652,7 +3237,7 @@ risultati (\cref{sec:fasi}).
       uguale al numero di processi lanciati (default 1). \\
     \texttt{-v n} & Kernel da usare (\cref{tab:kernel}); $-1$ = cuBLAS
       (default: il più veloce del backend, \texttt{warp\_row\_xt} o
-      \texttt{cpu\_block}). \\
+      \texttt{cpu\_row\_reg}). \\
     \texttt{-p 0|1} & Padding e allocazione allineata delle righe di $A$
       (default 1). \\
     \texttt{-R n} & Invocazioni misurate (default 20). \\
@@ -3714,6 +3299,24 @@ S.~Williams, A.~Waterman, D.~Patterson.
 architectures.
 \newblock \emph{Communications of the ACM}, 52(4):65--76, 2009.
 \newblock doi:10.1145/1498765.1498785.
+
+\bibitem{nvidia-rtx5000}
+NVIDIA.
+\newblock Quadro RTX 5000: specifiche tecniche.
+\newblock 2018.
+\newblock \url{https://www.nvidia.com/en-gb/products/workstations/quadro/rtx-5000/}
+
+\bibitem{nvidia-turing}
+NVIDIA.
+\newblock Tuning CUDA Applications for Turing.
+\newblock CUDA Toolkit Documentation.
+\newblock \url{https://docs.nvidia.com/cuda/turing-tuning-guide/}
+
+\bibitem{nvidia-turing-wp}
+NVIDIA.
+\newblock NVIDIA Turing GPU Architecture. Whitepaper WP-09183-001.
+\newblock 2018.
+\newblock \url{https://images.nvidia.com/aem-dam/Solutions/design-visualization/technologies/turing-architecture/NVIDIA-Turing-Architecture-Whitepaper.pdf}
 
 \end{thebibliography}
 

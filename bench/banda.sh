@@ -7,7 +7,7 @@
 # Compila i due programmi di bench/banda/ in bin/ e misura:
 #   1. GPU: 1 processo, letture coalescenti da 8 byte (come A nel nucleo);
 #   2. CPU: 20 processi MPI, uno per core (come la versione CPU del nucleo).
-# Per vedere anche la banda di un solo core (utile per il gruppo D):
+# Per vedere anche la banda di un solo core:
 #   PROCS_CPU="1 20" bash bench/banda.sh
 # Risultati in results/banda_<data>_<ora>.csv (le righe con # sono commenti).
 

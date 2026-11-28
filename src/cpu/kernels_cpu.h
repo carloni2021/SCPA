@@ -16,13 +16,13 @@
 /* Identificativi dei kernel: è il valore dell'opzione -v del programma. */
 enum {
     KERNEL_CPU_ROW   = 0,   /* una riga alla volta (baseline)                 */
-    KERNEL_CPU_BLOCK = 1    /* blocchi di righe x colonne in registri          */
+    KERNEL_CPU_ROW_REG = 1  /* come cpu_row, accumulatori in registri          */
 };
 
 void cpu_row(int M, int N, int k, const real_t *A, int lda,
              const real_t *X, real_t *Y);
 
-void cpu_block(int M, int N, int k, const real_t *A, int lda,
-               const real_t *X, real_t *Y);
+void cpu_row_reg(int M, int N, int k, const real_t *A, int lda,
+                 const real_t *X, real_t *Y);
 
 #endif /* KERNELS_CPU_H */
